@@ -29,3 +29,5 @@ data/evaluation/experiment_*/**/*
 *.sqlite
 *.sqlite3
 *.drawio.bkp
+
+docs/
