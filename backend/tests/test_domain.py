@@ -463,6 +463,7 @@ def test_fusion_uses_both_calibrated_scores():
     result = fuse_scores(q_feature=0.97, q_sequence=0.93)
 
     assert result.risk == pytest.approx(0.95)
+    assert result.method == "weighted_mean.v1"
     assert result.feature_weight == pytest.approx(0.5)
     assert result.sequence_weight == pytest.approx(0.5)
     assert result.available_branches == ("FEATURE", "SEQUENCE")
@@ -512,6 +513,62 @@ def test_fusion_uses_configured_weights_and_deep_merge():
     assert result.feature_weight == pytest.approx(0.75)
     assert result.sequence_weight == pytest.approx(0.25)
     assert result.config_version == "weighted.v1"
+
+
+@pytest.mark.parametrize(
+    ("q_feature", "q_sequence", "expected"),
+    [
+        (0.99, 0.50, 0.995),
+        (0.80, 0.20, 0.84),
+        (0.00, 0.00, 0.00),
+        (1.00, 0.25, 1.00),
+    ],
+)
+def test_noisy_or_detects_an_extreme_branch_without_mean_dilution(
+    q_feature,
+    q_sequence,
+    expected,
+):
+    result = fuse_scores(
+        q_feature=q_feature,
+        q_sequence=q_sequence,
+        config={
+            "version": "framework.v7",
+            "fusion": {
+                "method": "noisy_or.v1",
+                "feature_weight": 0.5,
+                "sequence_weight": 0.5,
+            },
+        },
+    )
+
+    assert result.risk == pytest.approx(expected)
+    assert result.method == "noisy_or.v1"
+
+
+def test_noisy_or_preserves_single_available_branch():
+    result = fuse_scores(
+        q_feature=0.87,
+        q_sequence=None,
+        config={"fusion": {"method": "noisy_or.v1"}},
+    )
+
+    assert result.risk == pytest.approx(0.87)
+
+
+def test_noisy_or_rejects_unreviewed_unequal_weight_semantics():
+    with pytest.raises(ValueError, match="requires equal"):
+        fuse_scores(
+            q_feature=0.8,
+            q_sequence=0.2,
+            config={
+                "fusion": {
+                    "method": "noisy_or.v1",
+                    "feature_weight": 0.75,
+                    "sequence_weight": 0.25,
+                }
+            },
+        )
 
 
 @pytest.mark.parametrize("bad_score", [-0.01, 1.01, float("nan")])

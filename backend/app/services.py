@@ -20,7 +20,10 @@ from app.catalog import (
     load_framework_config,
     load_sequence_config,
 )
-from app.domain.fusion import fuse_scores
+from app.domain.fusion import (
+    FUSION_METHOD_WEIGHTED_MEAN_V1,
+    fuse_scores,
+)
 from app.domain.readiness import (
     FeatureGlobalSupport,
     FeaturePersonSupport,
@@ -2686,6 +2689,10 @@ def create_assessment(
         )
     configured_feature_weight = float(framework_config["fusion"]["weights"]["feature"])
     configured_sequence_weight = float(framework_config["fusion"]["weights"]["sequence"])
+    configured_fusion_method = framework_config["fusion"].get(
+        "method",
+        FUSION_METHOD_WEIGHTED_MEAN_V1,
+    )
     configured_threshold_value = framework_config.get("decision", {}).get("alert_threshold")
     if configured_threshold_value is not None and locked_threshold is not None:
         if not math.isclose(float(configured_threshold_value), locked_threshold):
@@ -2926,6 +2933,7 @@ def create_assessment(
         config={
             "version": payload.config_version,
             "fusion": {
+                "method": configured_fusion_method,
                 "feature_weight": configured_feature_weight,
                 "sequence_weight": configured_sequence_weight,
             },
@@ -2959,6 +2967,7 @@ def create_assessment(
         config_version=payload.config_version,
         scoring_run_id=scoring_run_id,
         fusion_evidence={
+            "method": fusion.method,
             "available_branches": list(fusion.available_branches),
             "reason_codes": list(fusion.reason_codes),
             "q_feature": q_feature,

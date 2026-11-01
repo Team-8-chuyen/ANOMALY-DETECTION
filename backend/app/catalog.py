@@ -8,6 +8,9 @@ from app.settings import settings
 
 FEATURE_SCHEMA_VERSION = "feature128.v5"
 FRAMEWORK_SCHEMA_VERSION = "framework.v5"
+SUPPORTED_FRAMEWORK_SCHEMA_VERSIONS = frozenset(
+    {"framework.v5", "framework.v6", "framework.v7"}
+)
 SEQUENCE_SCHEMA_VERSION = "sequence7.v4"
 
 
@@ -29,8 +32,9 @@ def load_feature_catalog() -> dict[str, Any]:
 def load_framework_config() -> dict[str, Any]:
     with settings.framework_config_path.open(encoding="utf-8") as handle:
         config = json.load(handle)
-    if config.get("schema_version") != FRAMEWORK_SCHEMA_VERSION:
-        raise RuntimeError(f"{FRAMEWORK_SCHEMA_VERSION} configuration is missing or invalid")
+    version = config.get("schema_version")
+    if version not in SUPPORTED_FRAMEWORK_SCHEMA_VERSIONS:
+        raise RuntimeError(f"unsupported framework configuration: {version!r}")
     return config
 
 

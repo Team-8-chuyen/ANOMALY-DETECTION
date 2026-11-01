@@ -11,7 +11,16 @@ from cli import run_experiment
 
 def _write_framework(path: Path, *, marker: int = 1) -> None:
     path.write_text(
-        json.dumps({"schema_version": "framework.v5", "marker": marker}),
+        json.dumps(
+            {
+                "schema_version": "framework.v5",
+                "marker": marker,
+                "fusion": {
+                    "method": "weighted_mean.v1",
+                    "weights": {"feature": 0.5, "sequence": 0.5},
+                },
+            }
+        ),
         encoding="utf-8",
     )
 

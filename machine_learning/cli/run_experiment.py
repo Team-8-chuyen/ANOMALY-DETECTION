@@ -427,9 +427,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     test_score_manifest = _score_manifest(test_predictions)
     report = {
         "schema_version": (
-            "cert-experiment-run.v2"
-            if framework_config["schema_version"] == "framework.v6"
-            else "cert-experiment-run.v1"
+            "cert-experiment-run.v1"
+            if framework_config["schema_version"] == "framework.v5"
+            else "cert-experiment-run.v2"
         ),
         "status": "COMPLETE",
         "store": str(args.store.resolve()),

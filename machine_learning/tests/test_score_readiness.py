@@ -33,6 +33,9 @@ CONFIG_PATH = (
 CONFIG_V6_PATH = (
     Path(__file__).resolve().parents[2] / "backend" / "config" / "framework.v6.json"
 )
+CONFIG_V7_PATH = (
+    Path(__file__).resolve().parents[2] / "backend" / "config" / "framework.v7.json"
+)
 
 
 def _config() -> dict[str, object]:
@@ -41,6 +44,10 @@ def _config() -> dict[str, object]:
 
 def _config_v6() -> dict[str, object]:
     return json.loads(CONFIG_V6_PATH.read_text(encoding="utf-8"))
+
+
+def _config_v7() -> dict[str, object]:
+    return json.loads(CONFIG_V7_PATH.read_text(encoding="utf-8"))
 
 
 def _person_entry(**changes: object) -> dict[str, object]:
@@ -538,6 +545,48 @@ def test_framework_v6_reference_contract_and_inactive_day_policy(
         "feature": ("CURRENT_DAY_INACTIVE",),
         "sequence": ("CURRENT_DAY_INACTIVE",),
     }
+
+
+def test_framework_v7_reference_contract_uses_noisy_or(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "checkpoint-v7.pt"
+    checkpoint.write_bytes(b"immutable-checkpoint")
+    config = _config_v7()
+    artifact = _fit_reference_artifact(
+        _role_ready_reference_rows(60),
+        checkpoint_path=checkpoint,
+        preprocessing_checksum="b" * 64,
+        scaler_checksum="c" * 64,
+        framework_config=config,
+        framework_config_checksum="d" * 64,
+        source_attestation=_source_attestation(),
+    )
+
+    calibrated = _calibrate_row(
+        {
+            "user_id": "U001",
+            "day": "2010-06-01",
+            "split": "VALIDATION",
+            "role": "Engineer",
+            "role_epoch": "U001|Engineer|2010-01-02",
+            "feature_raw": 58.0,
+            "sequence_raw": 30.0,
+            "sequence_length": 35,
+            "active": True,
+        },
+        artifact,
+        config,
+    )
+
+    q_feature = calibrated["feature_calibrated"]
+    q_sequence = calibrated["sequence_calibrated"]
+    expected = 1.0 - (1.0 - q_feature) * (1.0 - q_sequence)
+    assert artifact["framework_schema_version"] == "framework.v7"
+    assert artifact["schema_version"] == "hierarchical-reference.v3"
+    assert calibrated["fusion_method"] == "noisy_or.v1"
+    assert calibrated["risk"] == pytest.approx(expected)
+    assert calibrated["risk"] > (q_feature + q_sequence) / 2.0
 
 
 def test_legacy_v1_reference_is_not_silently_reinterpreted() -> None:

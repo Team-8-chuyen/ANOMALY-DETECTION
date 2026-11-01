@@ -10,6 +10,12 @@ from typing import Any
 
 from .readiness import _resolve_config
 
+FUSION_METHOD_WEIGHTED_MEAN_V1 = "weighted_mean.v1"
+FUSION_METHOD_NOISY_OR_V1 = "noisy_or.v1"
+SUPPORTED_FUSION_METHODS = frozenset(
+    {FUSION_METHOD_WEIGHTED_MEAN_V1, FUSION_METHOD_NOISY_OR_V1}
+)
+
 
 @dataclass(frozen=True)
 class FusionResult:
@@ -19,6 +25,7 @@ class FusionResult:
     available_branches: tuple[str, ...]
     reason_codes: tuple[str, ...]
     config_version: str
+    method: str
 
     @property
     def can_alert(self) -> bool:
@@ -49,6 +56,17 @@ def _validated_weight(value: Any, name: str) -> float:
     return weight
 
 
+def _validated_method(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("fusion method must be a string")
+    if value not in SUPPORTED_FUSION_METHODS:
+        supported = ", ".join(sorted(SUPPORTED_FUSION_METHODS))
+        raise ValueError(
+            f"unsupported fusion method {value!r}; expected one of {supported}"
+        )
+    return value
+
+
 def fuse_scores(
     *,
     q_feature: float | None,
@@ -56,15 +74,19 @@ def fuse_scores(
     config: Mapping[str, Any] | None = None,
     config_path: str | Path | None = None,
 ) -> FusionResult:
-    """Fuse calibrated scores and renormalize weights over present branches.
+    """Fuse calibrated anomaly percentiles using a versioned method.
 
     ``None`` means that a branch returned ``NO_SCORE``.  When only one branch
     is present its normalized weight is 1.0, so its calibrated percentile is
     preserved exactly.  No alert can be produced when both branches are
-    absent.
+    absent. ``noisy_or.v1`` intentionally requires equal configured weights:
+    unequal nonlinear weighting needs a separate reviewed contract.
     """
 
     resolved = _resolve_config(config, config_path)
+    method = _validated_method(
+        resolved["fusion"].get("method", FUSION_METHOD_WEIGHTED_MEAN_V1)
+    )
     q_f = _validated_score(q_feature, "q_feature")
     q_s = _validated_score(q_sequence, "q_sequence")
     feature_weight = _validated_weight(resolved["fusion"]["feature_weight"], "feature_weight")
@@ -78,6 +100,7 @@ def fuse_scores(
             available_branches=(),
             reason_codes=("FUSION_NO_BRANCH_SCORE",),
             config_version=str(resolved["version"]),
+            method=method,
         )
 
     present_feature_weight = feature_weight if q_f is not None else 0.0
@@ -88,7 +111,26 @@ def fuse_scores(
 
     normalized_feature_weight = present_feature_weight / total_weight
     normalized_sequence_weight = present_sequence_weight / total_weight
-    risk = (q_f or 0.0) * normalized_feature_weight + (q_s or 0.0) * normalized_sequence_weight
+    if q_f is None:
+        risk = q_s
+    elif q_s is None:
+        risk = q_f
+    elif method == FUSION_METHOD_WEIGHTED_MEAN_V1:
+        risk = (
+            q_f * normalized_feature_weight
+            + q_s * normalized_sequence_weight
+        )
+    else:
+        if not math.isclose(
+            normalized_feature_weight,
+            normalized_sequence_weight,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(
+                "noisy_or.v1 requires equal feature and sequence weights"
+            )
+        risk = 1.0 - (1.0 - q_f) * (1.0 - q_s)
 
     branches: list[str] = []
     reasons: list[str] = []
@@ -108,4 +150,5 @@ def fuse_scores(
         available_branches=tuple(branches),
         reason_codes=tuple(reasons),
         config_version=str(resolved["version"]),
+        method=method,
     )

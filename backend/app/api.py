@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.catalog import (
     FEATURE_SCHEMA_VERSION,
-    FRAMEWORK_SCHEMA_VERSION,
     SEQUENCE_SCHEMA_VERSION,
+    SUPPORTED_FRAMEWORK_SCHEMA_VERSIONS,
     load_feature_catalog,
 )
 from app.database import Base, get_db
@@ -477,7 +477,8 @@ def ready(request: Request, db: DbSession) -> dict[str, str]:
         feature_config.get("schema_version") != FEATURE_SCHEMA_VERSION
         or not isinstance(features, list)
         or len(features) != 128
-        or framework_config.get("schema_version") != FRAMEWORK_SCHEMA_VERSION
+        or framework_config.get("schema_version")
+        not in SUPPORTED_FRAMEWORK_SCHEMA_VERSIONS
         or sequence_config.get("schema_version") != SEQUENCE_SCHEMA_VERSION
         or not isinstance(tokens, list)
         or len(tokens) != 7

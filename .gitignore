@@ -28,3 +28,4 @@ data/evaluation/experiment_*/**/*
 *.db-wal
 *.sqlite
 *.sqlite3
+*.drawio.bkp

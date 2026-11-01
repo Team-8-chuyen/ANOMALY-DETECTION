@@ -31,6 +31,11 @@ from insider_ml.dataset import (
     WindowDataset,
     load_prepared_windows,
 )
+from insider_ml.fusion import (
+    FUSION_METHOD_WEIGHTED_MEAN_V1,
+    CalibratedFusion,
+    fuse_calibrated_scores,
+)
 from insider_ml.inference import (
     ReferenceStats,
     calibrated_tail_score,
@@ -42,16 +47,20 @@ from insider_ml.stream_store import connect_store, metadata_get
 
 FRAMEWORK_V5 = "framework.v5"
 FRAMEWORK_V6 = "framework.v6"
-SUPPORTED_FRAMEWORK_VERSIONS = {FRAMEWORK_V5, FRAMEWORK_V6}
+FRAMEWORK_V7 = "framework.v7"
+SUPPORTED_FRAMEWORK_VERSIONS = {FRAMEWORK_V5, FRAMEWORK_V6, FRAMEWORK_V7}
+FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE = {FRAMEWORK_V6, FRAMEWORK_V7}
 ENTRY_CONTRACT_VERSION = "hierarchical-reference-entry.v1"
 ENTRY_CONTRACT_VERSION_V2 = "hierarchical-reference-entry.v2"
 REFERENCE_SCHEMA_BY_FRAMEWORK = {
     FRAMEWORK_V5: "hierarchical-reference.v2",
     FRAMEWORK_V6: "hierarchical-reference.v3",
+    FRAMEWORK_V7: "hierarchical-reference.v3",
 }
 ENTRY_CONTRACT_BY_FRAMEWORK = {
     FRAMEWORK_V5: ENTRY_CONTRACT_VERSION,
     FRAMEWORK_V6: ENTRY_CONTRACT_VERSION_V2,
+    FRAMEWORK_V7: ENTRY_CONTRACT_VERSION_V2,
 }
 _ENTRY_CHECKSUM_FIELDS = ("identity", "stats", "support", "calibrator")
 REFERENCE_ENDPOINT_POLICY = "ALL"
@@ -67,10 +76,10 @@ def _framework_version(framework_config: Mapping[str, Any]) -> str:
     return str(version)
 
 
-def _v6_enabled_feature_indices(
+def _enabled_feature_indices(
     framework_config: Mapping[str, Any],
 ) -> tuple[int, ...]:
-    """Resolve the v6 readiness denominator from the locked Feature128 catalog."""
+    """Resolve the v6/v7 readiness denominator from the Feature128 catalog."""
 
     try:
         contract = framework_config["readiness"]["feature"]["coverage_contract"]
@@ -78,7 +87,7 @@ def _v6_enabled_feature_indices(
         configured_count = contract["enabled_feature_count"]
         minimum_ratio = contract["minimum_enabled_feature_ratio"]
     except (KeyError, TypeError) as exc:
-        raise ValueError("framework.v6 has no enabled-feature coverage contract") from exc
+        raise ValueError("framework has no enabled-feature coverage contract") from exc
     if (
         not isinstance(disabled_names, list)
         or set(disabled_names) != set(PRIMARY_DISABLED_FEATURES)
@@ -89,15 +98,37 @@ def _v6_enabled_feature_indices(
         or not isinstance(minimum_ratio, (int, float))
         or not 0.0 < float(minimum_ratio) <= 1.0
     ):
-        raise ValueError("framework.v6 enabled-feature coverage contract is invalid")
+        raise ValueError("enabled-feature coverage contract is invalid")
     catalog_path = Path(__file__).resolve().parents[1] / "config" / "feature128.v5.json"
     feature_names = load_feature_names(catalog_path)
     enabled = tuple(
         index for index, name in enumerate(feature_names) if name not in disabled_names
     )
     if len(enabled) != configured_count or configured_count != 124:
-        raise ValueError("framework.v6 must contain exactly 124 primary-enabled features")
+        raise ValueError("framework must contain exactly 124 primary-enabled features")
     return enabled
+
+
+def _fuse_framework_scores(
+    q_feature: float | None,
+    q_sequence: float | None,
+    framework_config: Mapping[str, Any],
+) -> CalibratedFusion:
+    try:
+        fusion = framework_config["fusion"]
+        weights = fusion["weights"]
+        method = fusion.get("method", FUSION_METHOD_WEIGHTED_MEAN_V1)
+        feature_weight = weights["feature"]
+        sequence_weight = weights["sequence"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("framework config has no valid fusion contract") from exc
+    return fuse_calibrated_scores(
+        q_feature=q_feature,
+        q_sequence=q_sequence,
+        method=method,
+        feature_weight=feature_weight,
+        sequence_weight=sequence_weight,
+    )
 
 
 def _reference_versions(
@@ -289,7 +320,7 @@ def _validate_checkpoint_training_contract(
         or checkpoint["training_samples"] < 1
     ):
         raise ValueError(
-            "reference calibration requires a locked framework.v5/framework.v6 "
+            "reference calibration requires a locked framework.v5/v6/v7 "
             "training contract"
         )
     try:
@@ -312,10 +343,11 @@ def _load_framework_config(path: Path) -> dict[str, Any]:
         raise ValueError("framework config root must be an object")
     if payload.get("schema_version") not in SUPPORTED_FRAMEWORK_VERSIONS:
         raise ValueError(
-            "scoring requires an explicit supported framework.v5/framework.v6 config"
+            "scoring requires an explicit supported framework.v5/v6/v7 config"
         )
-    if payload["schema_version"] == FRAMEWORK_V6:
-        _v6_enabled_feature_indices(payload)
+    if payload["schema_version"] in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE:
+        _enabled_feature_indices(payload)
+    _fuse_framework_scores(None, None, payload)
     return payload
 
 
@@ -803,8 +835,8 @@ def _build_reference_entry(
         },
     }
     framework_version = _framework_version(framework_config)
-    if framework_version == FRAMEWORK_V6:
-        enabled_indices = _v6_enabled_feature_indices(framework_config)
+    if framework_version in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE:
+        enabled_indices = _enabled_feature_indices(framework_config)
         enabled_support = feature_support[np.asarray(enabled_indices, dtype=np.int64)]
         support.update(
             {
@@ -887,7 +919,6 @@ def _fit_reference_artifact(
 ) -> dict[str, Any]:
     if {row["split"] for row in rows} != {"TRAIN"}:
         raise ValueError("reference fitting accepts Train rows only")
-    framework_version = _framework_version(framework_config)
     reference_schema, entry_contract = _reference_versions(framework_config)
     build_diagnostics: dict[str, Any] = {
         "personal_references_skipped": {"feature": {}, "sequence": {}},
@@ -1061,12 +1092,15 @@ def _readiness_reasons(
                 person_config["min_active_days_in_current_role"]
             ):
                 reasons.append("PERSON_ROLE_ACTIVE_DAYS_LOW")
-            if _framework_version(framework_config) == FRAMEWORK_V6:
+            if (
+                _framework_version(framework_config)
+                in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE
+            ):
                 required_support = int(
                     person_config["min_observations_per_enabled_feature"]
                 )
                 if required_support != 40:
-                    raise ValueError("framework.v6 Person Feature support must be 40")
+                    raise ValueError("Person Feature support must be 40")
                 coverage = support["enabled_feature_support_ratio_at_40"]
                 minimum_coverage = framework_config["readiness"]["feature"][
                     "coverage_contract"
@@ -1121,12 +1155,15 @@ def _readiness_reasons(
                 role_config["min_recent_30d_user_days"]
             ):
                 reasons.append("ROLE_RECENT_USER_DAYS_LOW")
-            if _framework_version(framework_config) == FRAMEWORK_V6:
+            if (
+                _framework_version(framework_config)
+                in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE
+            ):
                 required_support = int(
                     role_config["min_support_per_enabled_feature"]
                 )
                 if required_support != 200:
-                    raise ValueError("framework.v6 Role Feature support must be 200")
+                    raise ValueError("Role Feature support must be 200")
                 coverage = support["enabled_feature_support_ratio_at_200"]
                 minimum_coverage = framework_config["readiness"]["feature"][
                     "coverage_contract"
@@ -1171,12 +1208,15 @@ def _readiness_reasons(
             reasons.append("GLOBAL_USERS_LOW")
         if support["observations"] < int(global_config["min_user_days"]):
             reasons.append("GLOBAL_USER_DAYS_LOW")
-        if _framework_version(framework_config) == FRAMEWORK_V6:
+        if (
+            _framework_version(framework_config)
+            in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE
+        ):
             required_support = int(
                 global_config["min_support_per_enabled_feature"]
             )
             if required_support != 200:
-                raise ValueError("framework.v6 Global Feature support must be 200")
+                raise ValueError("Global Feature support must be 200")
             coverage = support["enabled_feature_support_ratio_at_200"]
             minimum_coverage = framework_config["readiness"]["feature"][
                 "coverage_contract"
@@ -1726,8 +1766,10 @@ def _calibrate_row(
             "a frozen Train reference can only be applied to rows after Train end"
         )
 
+    empty_fusion = _fuse_framework_scores(None, None, framework_config)
     if (
-        _framework_version(framework_config) == FRAMEWORK_V6
+        _framework_version(framework_config)
+        in FRAMEWORKS_WITH_ENABLED_FEATURE_COVERAGE
         and not bool(row.get("active", False))
     ):
         return {
@@ -1738,6 +1780,7 @@ def _calibrate_row(
             "sequence_level": "NO_SCORE",
             "risk": None,
             "status": "NO_SCORE",
+            "fusion_method": empty_fusion.method,
             "_readiness_trace": {
                 "feature": ("CURRENT_DAY_INACTIVE",),
                 "sequence": ("CURRENT_DAY_INACTIVE",),
@@ -1789,16 +1832,20 @@ def _calibrate_row(
             break
         if selected[branch] == "NO_SCORE":
             readiness_trace[branch].append("NO_READY_REFERENCE")
-    available = [value for value in calibrated.values() if value is not None]
-    risk = fmean(available) if available else None
+    fusion = _fuse_framework_scores(
+        calibrated["feature"],
+        calibrated["sequence"],
+        framework_config,
+    )
     return {
         **row,
         "feature_calibrated": calibrated["feature"],
         "sequence_calibrated": calibrated["sequence"],
         "feature_level": selected["feature"],
         "sequence_level": selected["sequence"],
-        "risk": risk,
-        "status": "SCORED" if risk is not None else "NO_SCORE",
+        "risk": fusion.risk,
+        "status": "SCORED" if fusion.risk is not None else "NO_SCORE",
+        "fusion_method": fusion.method,
         "_readiness_trace": {
             branch: tuple(reasons) for branch, reasons in readiness_trace.items()
         },
@@ -1811,6 +1858,7 @@ def _write_rows(path: Path, rows: Iterable[dict[str, Any]]) -> None:
         "day",
         "split",
         "risk",
+        "fusion_method",
         "status",
         "feature_level",
         "sequence_level",
@@ -1844,6 +1892,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "a frozen Train reference cannot be applied back to the Train split"
         )
     framework_config = _load_framework_config(args.framework_config)
+    configured_fusion = _fuse_framework_scores(None, None, framework_config)
     framework_config_checksum = _sha256(args.framework_config)
     device_name = (
         "cuda"
@@ -1961,6 +2010,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "sequence_level": "NO_SCORE",
                 "feature_calibrated": None,
                 "sequence_calibrated": None,
+                "fusion_method": configured_fusion.method,
             }
             for row in raw_rows
         )
@@ -2011,6 +2061,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "checkpoint_sha256": _sha256(args.checkpoint),
         "framework_schema_version": framework_config["schema_version"],
         "framework_config_sha256": framework_config_checksum,
+        "fusion_method": configured_fusion.method,
         "reference_sha256": (
             _sha256(args.reference_in) if args.reference_in else None
         ),

@@ -76,6 +76,7 @@ DEFAULT_FRAMEWORK_CONFIG: dict[str, Any] = {
         },
     },
     "fusion": {
+        "method": "weighted_mean.v1",
         "feature_weight": 0.5,
         "sequence_weight": 0.5,
     },
