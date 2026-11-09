@@ -1,0 +1,90 @@
+# Khung cấu hình — CHƯA CÓ GIÁ TRỊ.
+# Mọi giá trị để null cho tới khi spec tương ứng được duyệt; D-xx chưa chốt thì không điền mặc định.
+# Tên khoá bám ký hiệu trong references/model-design.md và có thể đổi khi spec chốt (spec là chuẩn).
+# Config đã gộp của mỗi lần chạy được ghi ra runs/<id>/config.yaml.
+
+seed: null
+
+paths:
+  raw: data/raw/cert-r4.2
+  interim: data/interim
+  processed: data/processed
+  runs: runs
+  reports: reports
+
+data:
+  cert_version: r4.2
+  chunk_rows: 250000
+  datetime_format: "%m/%d/%Y %H:%M:%S"
+  work_hours: ["07:00", "19:00"]
+  user_buckets: 64
+  source_priority: [logon, device, file, http, email]
+
+split:                # C1
+  scheme: null        # D-02 — hoãn tới sau khi code C1 (DL-009)
+  malicious_in_train: null  # D-03 — hoãn tới sau khi code C1 (DL-009)
+
+features:
+  count: 100
+  pc_history_days: 30
+  own_pc_min_days: 3
+  history_days: 30
+  psychometric_mode: ablation_only
+  transform: raw
+
+sequence:
+  max_len: null
+  truncation: compress_only
+  run_gap_minutes: 5
+  gap_bucket_minutes: [0, 1, 5, 15, 60, 240]
+
+feature_ae:           # C2 — khoảng tune ở tuning-protocol.md §3
+  latent: null
+  hidden: null
+  dropout: null
+  lr: null
+  weight_decay: null
+  batch_size: null
+  max_epochs: null
+  patience: null
+
+seq_transformer:      # C3
+  objective: null     # D-04
+  d_model: null
+  n_layers: null
+  n_heads: null
+  ff_mult: null
+  dropout: null
+  lr: null
+  mask_ratio: null
+  batch_size: null
+  max_epochs: null
+  patience: null
+
+fusion:               # C4
+  alpha: null         # D-06
+
+tiers:                # C5
+  placement: null     # D-08
+  group_key: null     # D-07
+  weighting: null     # D-09
+  W: null             # D-11
+  k_P: null
+  k_G: null
+  min_group_size: null
+
+threshold:            # C6
+  p_selection: null   # D-10
+  budget_B: null
+  p: null
+  R: null             # D-11
+  W_tau: null
+
+evaluation:           # C7
+  n_seeds: null
+  recall_at_k: null
+  bootstrap_n: null
+
+tuning:
+  n_trials: null
+  user_subsample: null
