@@ -2,7 +2,7 @@
 
 Tài liệu sống của project: hệ thống đang làm gì, đã code tới đâu, chạy thế nào, vì sao quyết định như vậy. Cập nhật **mỗi lần code**; mọi thay đổi có một dòng Decision Log.
 
-Bản 2026-11-02 · Version 0.4
+Bản 2026-11-09 · Version 0.5
 
 ## 1. Tổng quan
 
@@ -19,7 +19,7 @@ Bản 2026-11-02 · Version 0.4
 | C2 Luồng đặc trưng | | Chưa làm | | |
 | C3 Luồng chuỗi | | Chưa làm | | |
 | C4 Hợp nhất điểm | | Chưa làm | | |
-| C5 Chuẩn 3 tầng | | Chưa làm | | |
+| C5 Chuẩn 3 tầng | SPEC-002 v0.1 | Spec draft chuyển từ repository cha; chờ duyệt | Chưa chạy tại Team-8 | |
 | C6 Ngưỡng thích ứng | | Chưa làm | | |
 | C7 Đánh giá & ablation | | Chưa làm | | |
 
@@ -77,6 +77,7 @@ Câu đã trả lời → ghi Decision Log rồi xoá dòng ở đây (không đ
 | 0.2 | 2026-11-02 | Chốt CERT r4.2 và môi trường Python 3.11 + CUDA; hoãn chia tập và xử lý ngày độc hại trong train tới sau khi code C1 | DL-007 → DL-009 |
 | 0.3 | 2026-11-02 | Đẩy Google Doc bản 0.2 (thêm DL-005 → DL-009, tham số CERT r4.2, 4 thuật ngữ); người dùng yêu cầu đẩy trước khi code | — |
 | 0.4 | 2026-11-02 | Đưa project + skill lên GitHub nhánh `master`, thay toàn bộ framework cũ | DL-010 |
+| 0.5 | 2026-11-09 | Chọn repository Team-8; chuẩn bị SPEC-001/002 kế thừa để duyệt, chưa chuyển code | DL-011 |
 
 ## 11. Decision Log
 
@@ -94,3 +95,4 @@ Mỗi thay đổi về thiết kế, tham số, dữ liệu, code, hoặc phạm
 | DL-008 | D-12 · môi trường | **venv Python 3.11 + PyTorch bản CUDA cho RTX 3050 Laptop 4GB** | Người dùng chốt 02/11/2026 (trả lời OQ-04). Hiện trạng đo 02/11/2026: máy chỉ có Python 3.14 và 3.12, chưa có 3.11; driver NVIDIA 566.07 hỗ trợ PyTorch CUDA 12.x. SPEC-001 phải có bước cài Python 3.11 và tạo venv; hỏi trước khi cài. **Phương án bị loại**: Python 3.12 + CUDA; chạy CPU — quá chậm cho train đủ dữ liệu | 2026-11-02 |
 | DL-009 | D-02, D-03 · C1 | **Hoãn chọn tỉ lệ chia tập (OQ-02) và cách xử lý ngày độc hại trong train (OQ-03) tới sau khi code C1.** SPEC C1 phải làm cả 3 phương án của mỗi câu thành tuỳ chọn trong config, mặc định để trống; chốt trước lần train đầu tiên | Người dùng chốt 02/11/2026. Cần thấy khoảng ngày và phân bố dữ liệu thật trước khi chọn. Ràng buộc chống leakage (L5): khi chốt chỉ dựa trên khoảng ngày, số user-day, và vị trí ngày độc hại; không chọn theo kết quả mô hình | 2026-11-02 |
 | DL-010 | Git · repo | **Đưa Framework-rework và skill `insider-threat-model-dev` lên `github.com/lethanhloi0603/ANOMALY-DETECTION` nhánh `master`**, thay toàn bộ framework cũ (backend FastAPI, migrations, CI) bằng một commit mới (9d62405), không force-push | Người dùng chốt 02/11/2026. Lịch sử cũ giữ nguyên, khôi phục được từ commit b3778f6; nhánh `main` vẫn ở bản cũ. Repo public: người dùng đồng ý công khai đề cương (`research-proposal.md`) và email chủ Google Doc. **Phương án bị loại**: bỏ đề cương khỏi repo; chuyển repo sang private trước khi đẩy | 2026-11-02 |
+| DL-011 | Nơi triển khai | **Triển khai ba tầng tại repository Team-8 vừa clone** theo lựa chọn A của người dùng. SPEC-001/002 đang Draft; chưa coi lựa chọn nơi làm việc là duyệt thiết kế | Giữ nguyên công việc tại repository cha. **Phương án bị loại**: làm tại repository cha; đồng bộ cả hai | 2026-11-09 |
