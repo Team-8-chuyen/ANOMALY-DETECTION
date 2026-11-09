@@ -6,11 +6,13 @@ Mỗi spec là một tệp `SPEC-NNN-<slug>.md`, tạo từ `templates/spec-temp
 
 | Spec | Thành phần | Trạng thái | Version |
 |---|---|---|---|
-| — | — | Chưa có spec | — |
+| [SPEC-001](SPEC-001-role-baseline-validation.md) | Hồ sơ ghép Role/validation hỗ trợ, không là nhiệm vụ riêng hiện tại | Implemented — giữ code phụ thuộc | 1.0 |
+| [SPEC-002](SPEC-002-three-tier-group-ablation.md) | Hai case Group Department/Role, score ba tầng và p99 Calibration | Implemented — đã chạy CERT và audit test lần 1 | 1.0 |
+| [SPEC-003](SPEC-003-context-features.md) | Đề xuất mở rộng feature ngoài nhiệm vụ | Withdrawn — không triển khai, DL-041 | 0.2 |
 
 ## Thứ tự dự kiến
 
-Theo phụ thuộc C1 → C7; thứ tự và cách gộp thành phần vào từng spec hỏi người dùng trước khi viết.
+**Phạm vi hiện tại chỉ là SPEC-002 (DL-041).** Bảng C1 → C7 bên dưới là lộ trình framework lịch sử, không phải danh sách nhiệm vụ được yêu cầu triển khai tiếp.
 
 | Bước | Thành phần | Quyết định phải chốt trước |
 |---|---|---|

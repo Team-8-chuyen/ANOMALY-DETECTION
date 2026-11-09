@@ -2,7 +2,7 @@
 
 Pipeline nghiên cứu phát hiện insider threat trên CERT: hai luồng (đặc trưng + chuỗi) tái tạo riêng rồi hợp nhất điểm, chuẩn hành vi 3 tầng Personal–Group–Global, ngưỡng thích ứng theo người dùng; đánh giá theo RQ1–RQ3.
 
-Trạng thái: **mới dựng khung, chưa code thành phần nào.** Tiến độ từng thành phần xem [docs/BA-insider-threat-detection.md](docs/BA-insider-threat-detection.md) § 2.
+Phạm vi hiện tại: **kiến trúc ba tầng Global–Group–Personal theo SPEC-002 đã triển khai**, gồm hai cấu hình Group theo Department hoặc Role. Xem [hướng dẫn chạy hai case](docs/three-tier-usage.md). Mô tả framework rộng hơn bên dưới là bối cảnh lịch sử, không phải phạm vi cần làm tiếp.
 
 ## Cấu trúc
 

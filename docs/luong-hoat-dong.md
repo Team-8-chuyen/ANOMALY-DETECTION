@@ -1,52 +1,224 @@
 # Phát hiện Insider Threat — Luồng hoạt động của hệ thống
 
-Cập nhật 2026-11-02 · Bản 0.2 · Chưa code bước nào
+Cập nhật 2026-11-09 · Bản 0.26 · Tài liệu bàn giao kiến trúc ba tầng đã chạy và audit
 
 ## 1. Tổng quan
 
-Hệ thống phát hiện nhân viên nội bộ có hành vi bất thường (insider threat) từ nhật ký hoạt động trên máy tính. Đầu vào là log đăng nhập, USB, file, email và web của bộ dữ liệu CERT bản r4.2. Đầu ra là danh sách cảnh báo theo từng người dùng, từng ngày. Hệ thống chấm điểm mỗi ngày bằng hai mô hình: một mô hình đếm khối lượng thao tác, một mô hình đọc thứ tự thao tác. Điểm được so với thói quen của chính người đó, của nhóm cùng vai trò và của toàn công ty. Mỗi người có ngưỡng cảnh báo riêng. Hệ thống trả lời ba câu hỏi nghiên cứu RQ1, RQ2, RQ3. Đã dựng khung thư mục project tại `Framework-rework`; đã code 0/7 bước.
+Phạm vi nhiệm vụ hiện tại chỉ là kiến trúc ba tầng theo SPEC-002, gồm hai case Department/Role. Không triển khai mở rộng feature SPEC-003 hoặc toàn bộ framework. Ghép LDAP và kiểm tra dữ liệu là các bước hỗ trợ để hai case chạy đúng.
 
-## 2. Luồng tổng
+Hệ thống đã có phiên bản thống kê ba tầng: toàn tổ chức, nhóm và cá nhân. Hai cấu hình dùng nhóm theo phòng ban hoặc chức vụ. Mỗi cấu hình tạo điểm bất thường và một ngưỡng cảnh báo từ Calibration. Cả hai đã chạy trên train, Calibration và test CERT với cùng dữ liệu và tham số. Test lần 1 dùng ngưỡng Calibration đã đóng băng. Hai mô hình tái tạo riêng cho RQ1 chưa triển khai.
 
-Đã code 0/7 bước. Bước kế tiếp là bước 1 — chuẩn bị dữ liệu CERT r4.2 và gán nhãn từng user-day (SPEC-001, chưa viết).
+## 2. Hệ thống ghép chức vụ trước khi tính thống kê
 
-## 3. Tham số đang dùng
+| Tầng hoặc bước | Case 1 | Case 2 |
+|---|---|---|
+| Global | Thống kê hành vi toàn tổ chức từ train | Giống Case 1 |
+| Group | Thống kê theo department trong LDAP | Thống kê theo role trong LDAP |
+| Personal | Lịch sử hành vi riêng của từng người | Giống Case 1 |
+| Kết hợp | Adaptive Backoff tạo một score cuối | Cùng công thức và tham số |
+| Ngưỡng | Một threshold từ score Calibration của Case 1 | Một threshold từ score Calibration của Case 2 |
 
-| Tham số (tên dễ hiểu) | Khoá config | Giá trị | Ý nghĩa | Cách chọn |
+Role và Department là hai định nghĩa thay thế của tầng Group. Hai case có cùng dữ liệu, feature và mốc chia tập.
+
+| Bước | Hệ thống làm gì | Đầu vào | Đầu ra | Tệp code |
 |---|---|---|---|---|
-| Phiên bản bộ dữ liệu CERT | `data.cert_version` | r4.2 | Hệ thống đọc log và đáp án insider của bản r4.2 | Người dùng chốt (→ DL-007) |
+| 1 | Hệ thống kiểm tra bảng nhân sự từng tháng và bảng sáu đặc trưng của từng người mỗi ngày. | LDAP và feature CSV | Các dòng hợp lệ hoặc thông báo lỗi | src/itd/data/ldap.py |
+| 2 | Hệ thống gắn chức vụ đúng tháng cho từng dòng hoạt động. | Dữ liệu hợp lệ | CSV thêm role và role_missing | scripts/attach_roles.py |
+| 3 | Hàm thống kê kiểm tra đầu vào rồi tính trung bình và độ lệch chuẩn cho toàn tổ chức hoặc từng chức vụ. | Ma trận và chức vụ | Mean/std cho mỗi đặc trưng | src/itd/scoring/baseline.py |
+| 4 | Hệ thống ghép cả phòng ban và chức vụ theo tháng, giữ nguyên các dòng thiếu thông tin nhóm. | Feature CSV và LDAP | Hai trường nhóm và cờ thiếu | src/itd/data/ldap.py |
+| 5 | Hệ thống tính score so với toàn tổ chức, nhóm và lịch sử riêng, rồi kết hợp theo độ tin cậy. | Train và từng ngày cần chấm | Score tầng, trọng số và score cuối | src/itd/scoring/tiers.py |
+| 6 | Hệ thống lấy phân vị Calibration để tạo ngưỡng cuối riêng cho từng cấu hình. | Score Calibration | Threshold và cờ cảnh báo | src/itd/scoring/threshold.py |
+| 7 | Runner kiểm tra hai cấu hình dùng chung dữ liệu và lưu kết quả vào hai thư mục riêng. | Config Department/Role | Artifact của từng case | scripts/run_group_ablation.py |
 
-## 4. Thuật ngữ
+## 3. Hệ thống dừng khi dữ liệu không đáp ứng hợp đồng
+
+| Quy tắc | Xử lý |
+|---|---|
+| Nhân sự theo tháng | Hệ thống tra chức vụ theo user và tháng của ngày hoạt động. |
+| Thiếu chức vụ | Hệ thống gắn UNKNOWN và role_missing=1 cho dòng thiếu chức vụ. |
+| Dữ liệu sai | Hệ thống báo lỗi khi ngày sai, khóa trùng, thiếu cột hoặc giá trị đếm không hữu hạn/âm. |
+| Baseline | Hàm tính toán yêu cầu ma trận hai chiều có ít nhất một dòng và một đặc trưng. |
+| Nhóm chức vụ | Hàm thống kê bỏ qua chức vụ rỗng và UNKNOWN. |
+| Ghi kết quả | CLI kiểm tra dữ liệu trước khi ghi và yêu cầu --overwrite để thay output có sẵn. |
+| Lịch sử cá nhân | Hệ thống chỉ dùng các ngày trước ngày đang chấm và cập nhật sau khi chấm xong cả ngày. |
+| Backoff | Nhân viên mới hoặc nhóm ít người nhận trọng số lớn hơn từ tầng toàn tổ chức. |
+| So sánh hai case | Runner giữ cùng feature, tập mẫu và công thức; hai case chỉ đổi phòng ban thành chức vụ. |
+| Test | Runner mặc định chỉ fit train và Calibration; --include-test mới mở tập test. |
+
+Spec: SPEC-001 và SPEC-002 v1.0 · Quyết định triển khai mới: DL-027 → DL-030.
+
+### 3.1. Mỗi ngày nhận một điểm so với từng tầng
+
+| Bước | Quy tắc |
+|---|---|
+| Đầu vào | Mỗi user-day có số logon, logoff, sự kiện thiết bị, file, email và HTTP. |
+| Chuẩn hành vi | Global và Group lưu trung bình, độ lệch chuẩn từ train. Personal tính thống kê từ lịch sử trước ngày đang chấm. |
+| Score tầng | Hệ thống chuẩn hóa độ lệch từng feature, giữ phần tăng và lấy trung bình sáu feature. |
+| Mẫu số | Hệ thống dùng max(std,1) để xử lý feature hằng hoặc độ lệch chuẩn nhỏ. |
+| Score cuối | Hệ thống cộng score ba tầng theo các trọng số không âm có tổng bằng 1. |
+
+### 3.2. Backoff chuyển trọng số về tầng có đủ dữ liệu
+
+| Tình huống | Hệ thống xử lý |
+|---|---|
+| Personal đủ lịch sử | Trọng số Personal tăng dần theo số ngày hoạt động của người đó. |
+| Personal thiếu lịch sử | Hệ thống dành trọng số cho Group và Global. |
+| Group đủ người | Trọng số Group tăng theo số user riêng biệt trong train của nhóm hiện tại. |
+| Group thiếu hoặc ít người | Hệ thống chuyển phần trọng số Group về Global. |
+| Cả Personal và Group thiếu | Hệ thống dùng Global để chấm điểm. |
+
+### 3.3. Calibration tạo ngưỡng trước khi chấm test
+
+| Giai đoạn | Hệ thống xử lý |
+|---|---|
+| Train | Hệ thống fit Global/Group và khởi tạo lịch sử Personal. |
+| Calibration | Hệ thống chấm từng ngày, sau đó tính phân vị score để lưu threshold riêng cho từng case. |
+| Test | Hệ thống dùng threshold đã lưu; Personal tiếp tục cập nhật sau khi chấm xong ngày. |
+| Quyết định | Hệ thống cảnh báo khi score lớn hơn threshold, không cảnh báo khi score bằng threshold. |
+
+## 4. Tham số vận hành nằm ở CLI và môi trường kiểm chứng
+
+| Tham số | Giá trị | Nguồn |
+|---|---|---|
+| Đường dẫn nhân sự, input và output | --ldap-dir, --input, --output | Đối số CLI |
+| Ghi đè output | Mặc định tắt; bật bằng --overwrite | scripts/attach_roles.py |
+| Phép tính độ lệch chuẩn | ddof=0 | src/itd/scoring/baseline.py |
+| Môi trường kiểm chứng | Python 3.11.9, NumPy 1.26.4, pytest 8.3.5 | runs/20261106-spec001-validation/env.txt |
+| Lịch sử cá nhân | 30 ngày trước ngày chấm | personal.window_days |
+| Scale tối thiểu | 1 trên raw count | scoring.scale_floor |
+| Độ tin cậy | k_P=7 ngày, k_G=3 người; tối thiểu 2 ngày/2 người | backoff trong common config |
+| Hiệu chỉnh ngưỡng | p=0.99, linear, cảnh báo khi score>threshold | threshold trong common config |
+
+## 5. Kết quả kiểm chứng gồm dữ liệu giả và CERT thật
+
+| Kiểm chứng | Kết quả | Bằng chứng |
+|---|---|---|
+| Bộ kiểm thử | 61 test qua trong 0.94 giây | runs/20261106-spec001-validation/pytest.xml |
+| Chạy CLI hai lần | 3 dòng, 1 dòng có Role, 2 dòng thiếu Role; output giống nhau | runs/20261106-spec001-validation/metrics.json |
+| Thời gian smoke | 0.2188 giây cho hai lần | Cùng metrics.json |
+| Bộ kiểm thử mới nhất | 101 test qua trong 2.68 giây | runs/20261107-spec002-smoke/pytest.xml |
+| Hai case trên cùng fixture | Mỗi case có 5 dòng train, 4 Calibration và 2 test giả; hai lần chạy cùng score/threshold | runs/20261107-spec002-smoke/verification.json |
+| Ngưỡng trên fixture | Department: 0.7714150071929214; Role: 1.5278060653061314 | threshold.json trong run1 của mỗi case |
+
+Các ngưỡng trong bảng trên chỉ thuộc fixture. Các bảng tiếp theo ghi ngưỡng CERT và metric test lần 1.
+
+| Kiểm chứng CERT mới nhất | Kết quả | Bằng chứng |
+|---|---|---|
+| Fit và Calibration hai case | Mỗi case dùng 105.171 dòng train và 84.066 dòng Calibration; thời gian runner 26.898015 giây | runs/20261107-cert-first-calibration/result/metrics.json |
+| Ngưỡng Department | 0.8423588864100263; 841 cảnh báo Calibration | result/department/threshold.json và calibration_scores.csv trong run trên |
+| Ngưỡng Role | 0.8115505803240236; 841 cảnh báo Calibration | result/role/threshold.json và calibration_scores.csv trong run trên |
+| Đối soát sau chạy | Cùng user-day/config chung; score hữu hạn, tổng trọng số bằng 1; test deferred | runs/20261107-cert-first-calibration/verification.json |
+
+Các cảnh báo Calibration là thống kê trên tập dùng hiệu chỉnh, chưa phải hiệu quả held-out. Chính sách loại ngày độc hại khỏi train hiện giữ nguyên số dòng vì đáp án có 0 ngày độc hại trong train.
+
+| Metric test lần 1 | Department | Role |
+|---|---:|---:|
+| Số user-day / số dương | 141.215 / 515 | 141.215 / 515 |
+| AP | 0.039175 | 0.075425 |
+| Precision | 6.13% | 9.68% |
+| Recall | 16.31% | 24.27% |
+| F1 | 0.089125 | 0.138427 |
+| FPR | 0.9140% | 0.8287% |
+| Đúng dương / cảnh báo sai | 84 / 1.286 | 125 / 1.166 |
+
+Role có kết quả quan sát cao hơn trên split này; mô hình vẫn bỏ sót nhiều ngày độc hại. Bằng chứng: `runs/20261107-cert-test-open-1/metrics.json` và `metric-checks.json`. Báo cáo giới hạn nhãn và phương pháp: `docs/cert-test-open-1-results.md`.
+
+| Audit sau test | Kết quả |
+|---|---|
+| Đáp án với raw log | Cả 7.323 sự kiện khớp nguồn, ID, user và timestamp. |
+| Raw với feature | Sáu count khớp toàn bộ 330.452 user-day, không có khóa thiếu/thừa. |
+| Lịch sử và score | 450.562 dòng Calibration/test của hai case khớp tính lại; sai số score tối đa 8.88e-16. |
+| Metric | AP, ROC-AUC và confusion metrics khớp đối soát độc lập. |
+
+Audit chỉ đọc và xác minh kết quả đã lưu. Mô hình, threshold và lần mở test giữ nguyên. Chi tiết: `docs/label-pipeline-audit.md`.
+
+## 6. Người chạy dùng môi trường kiểm chứng riêng
+
+Chạy bộ kiểm thử:
+
+```powershell
+.\.venv-validation311\Scripts\python.exe -m pytest -q
+```
+
+Chạy lại fixture smoke đã lưu:
+
+```powershell
+.\.venv-validation311\Scripts\python.exe scripts/attach_roles.py --ldap-dir runs/20261106-spec001-validation/LDAP --input runs/20261106-spec001-validation/features.csv --output runs/20261106-spec001-validation/roles.csv --overwrite
+```
+
+Chạy hai case trên fixture đã lưu; chọn run-dir mới mỗi lần:
+
+```powershell
+.\.venv-validation311\Scripts\python.exe scripts/run_group_ablation.py --config runs/20261107-spec002-smoke/fixture/department.json --config runs/20261107-spec002-smoke/fixture/role.json --run-dir runs/20261107-spec002-smoke/manual-run --include-test
+```
+
+## 7. Thuật ngữ giúp đọc kết quả
 
 | Thuật ngữ | Nghĩa |
 |---|---|
-| Insider threat | Rủi ro do người trong tổ chức có quyền truy cập hợp pháp gây ra, cố ý hoặc vô ý |
-| Anomaly detection | Cách phát hiện bằng việc học hành vi bình thường rồi đánh dấu ngày lệch khỏi nó, không cần nhiều ví dụ tấn công |
-| CERT r4.2 | Bộ dữ liệu log mô phỏng một công ty khoảng 1000 nhân viên, có đánh dấu sẵn các insider theo 3 kịch bản |
-| User-day | Một người dùng trong một ngày; là đơn vị hệ thống chấm điểm và cảnh báo |
-| Optuna | Thư viện tự thử nhiều bộ tham số và giữ bộ cho kết quả tốt nhất |
-| Tập validation | Phần dữ liệu ở giữa giai đoạn, chỉ dùng để chọn tham số, không dùng để báo cáo kết quả |
-| Rò rỉ dữ liệu (leakage) | Thông tin của phần dùng để đánh giá lọt vào lúc học hoặc lúc chọn tham số, làm kết quả đẹp hơn thực tế |
-| venv | Môi trường Python riêng của project, giữ đúng phiên bản thư viện để chạy lại ra cùng kết quả |
-| CUDA | Phần mềm của NVIDIA cho phép PyTorch huấn luyện mô hình trên card đồ hoạ thay vì CPU |
+| LDAP | Bảng nhân sự ghi chức vụ của người dùng theo từng tháng. |
+| User-day | Một người dùng trong một ngày hoạt động. |
+| Baseline | Thống kê hành vi được dùng làm mốc so sánh cho bước phát triển tiếp theo. |
+| Smoke | Lần chạy nhỏ để kiểm tra các phần nối được với nhau. |
+| NaN/Inf | Giá trị số không hợp lệ hoặc vô hạn. |
+| Calibration | Giai đoạn dữ liệu sau train dùng để xác định ngưỡng trước khi chấm test. |
+| Threshold | Mốc score dùng để quyết định một ngày có tạo cảnh báo. |
+| Adaptive Backoff | Cách phân bổ trọng số dựa trên số ngày lịch sử cá nhân và số người trong nhóm. |
+| Precision | Tỷ lệ ngày dương theo đáp án trong các ngày hệ thống cảnh báo. |
+| Recall | Tỷ lệ ngày dương theo đáp án được hệ thống cảnh báo. |
+| FPR | Tỷ lệ ngày âm theo đáp án bị hệ thống cảnh báo. |
+| AP | Chỉ số tóm tắt precision và recall khi thay đổi ngưỡng trên bảng xếp hạng score. |
 
-## 5. Decision Log
+## 8. Decision Log nằm trong tài liệu BA
 
-| # | Liên quan | Quyết định | Lý do | Ngày |
-|---|---|---|---|---|
-| DL-001 | Phạm vi project | **Project chỉ gồm pipeline ML nghiên cứu bằng Python/PyTorch**: chuẩn bị dữ liệu, hai mô hình, chuẩn 3 tầng, ngưỡng thích ứng, đánh giá và ablation cho RQ1–RQ3 | Người dùng chốt 01/11/2026. **Phương án bị loại**: thêm demo FastAPI; làm full như bản cũ (ASP.NET + React) — không cần cho việc trả lời câu hỏi nghiên cứu | 2026-11-01 |
-| DL-002 | Chọn tham số | **Chọn tham số bằng Optuna trên tập validation không dùng nhãn; nhãn chỉ dùng ở lần đánh giá cuối** | Người dùng chốt 01/11/2026. Dùng nhãn để chọn tham số làm kết quả đẹp giả, khó bảo vệ trong paper. **Phương án bị loại**: Optuna trên validation có nhãn; grid search nhỏ | 2026-11-01 |
-| DL-003 | Tài liệu | **Google Doc này được cập nhật sau mỗi lần code xong, viết bằng ngôn ngữ BA** | Người dùng chốt 02/11/2026. Người đọc Doc không đọc code; chi tiết kỹ thuật nằm ở spec | 2026-11-02 |
-| DL-004 | Tài liệu | **Doc được ghi bằng Apps Script gắn vào Doc; mỗi lần cập nhật ghi đè toàn bộ tab đầu tiên** | Người dùng chốt 02/11/2026. Ghi được mà không cần connector và không phụ thuộc tài khoản Drive đang kết nối. Hệ quả: comment trên Doc mất neo sau mỗi lần cập nhật, nên được đọc và báo lại trước khi ghi. **Phương án bị loại**: connector Google Docs (phải bật thêm); Docs API qua service account (phải tạo project Google Cloud) | 2026-11-02 |
-| DL-005 | Nơi code | **Code project tại thư mục `D:\AI for BA\MW\Framework-rework`**, thay cho thư mục cũ `D:\Insider-Threat-Research` | Người dùng chốt 02/11/2026. Project mới dùng chung Google Doc này và cấu hình Apps Script với thư mục cũ | 2026-11-02 |
-| DL-006 | Cấu trúc project | **Dựng sẵn khung thư mục chuẩn, chưa viết code**: mỗi bước 1–7 có thư mục riêng, cùng thư mục cấu hình, dữ liệu, kiểm thử, spec, tài liệu, kết quả chạy và bảng/hình cho paper. Tệp cấu hình chỉ có tên tham số, chưa có giá trị | Người dùng yêu cầu 02/11/2026. Giá trị tham số và thư viện cần cài do từng spec quyết định. **Phương án bị loại**: tạo sẵn các tệp code rỗng — tên tệp và cách gọi hàm phải chốt trong spec | 2026-11-02 |
-| DL-007 | Dữ liệu | **Dùng bộ dữ liệu CERT bản r4.2** | Người dùng chốt 02/11/2026. Bản được dùng nhiều nhất trong các paper, nhiều insider, dễ so sánh kết quả. **Phương án bị loại**: r5.2; r6.2 — mỗi kịch bản chỉ có 1 insider, khó đo tỉ lệ phát hiện | 2026-11-02 |
-| DL-008 | Môi trường | **Chạy trên venv Python 3.11, PyTorch bản CUDA, card RTX 3050 Laptop 4GB** | Người dùng chốt 02/11/2026. Máy hiện chỉ có Python 3.14 và 3.12, nên bước 1 có thêm việc cài Python 3.11; việc cài được hỏi người dùng trước. **Phương án bị loại**: Python 3.12 + CUDA; chạy bằng CPU — quá chậm để huấn luyện trên toàn bộ dữ liệu | 2026-11-02 |
-| DL-009 | Dữ liệu | **Hoãn hai quyết định tới sau khi code bước 1**: tỉ lệ chia dữ liệu thành phần học / chọn tham số / đánh giá, và cách xử lý ngày có hành vi độc hại rơi vào phần học. Bước 1 cho phép chọn cả 3 phương án của mỗi quyết định trong tệp cấu hình; chốt trước lần huấn luyện đầu tiên | Người dùng chốt 02/11/2026: cần xem khoảng ngày và phân bố dữ liệu thật trước khi chọn. Để tránh rò rỉ dữ liệu, khi chốt chỉ dựa vào khoảng ngày, số user-day và vị trí các ngày độc hại, không dựa vào kết quả mô hình | 2026-11-02 |
+| Quyết định | Nội dung |
+|---|---|
+| DL-014 | Người dùng duyệt SPEC-001 v1.0. |
+| DL-015 | Hệ thống ghép Role đúng tháng và bảo vệ file dữ liệu. |
+| DL-016 | Global/Role dùng chung kiểm tra đầu vào. |
+| DL-017 | Kiểm chứng dùng môi trường Python 3.11 riêng. |
+| DL-027 | Người dùng duyệt SPEC-002 v1.0. |
+| DL-028 | Hai case dùng chung pipeline ba tầng, chỉ đổi định nghĩa Group. |
+| DL-029 | Mỗi case hiệu chỉnh threshold từ Calibration. |
+| DL-030 | Runner bảo vệ so sánh công bằng, giữ test mặc định deferred và lưu run riêng. |
+| DL-036 | Người dùng duyệt mở test lần 1 với cấu hình và ngưỡng đã lưu. |
+| DL-037 | Kết quả test được giữ làm mốc; mô hình giữ nguyên sau khi xem kết quả. |
+| DL-038 | Audit raw/nhãn/pipeline đạt trong phạm vi đã kiểm tra; kết quả test giữ nguyên. |
 
-## 6. Lịch sử cập nhật
+## 9. Lịch sử cập nhật ghi rõ phạm vi đã kiểm chứng
 
 | Bản | Ngày | Thay đổi |
 |---|---|---|
-| 0.1 | 2026-11-02 | Bản thử: tổng quan, thuật ngữ, 4 quyết định đầu tiên |
-| 0.2 | 2026-11-02 | Thêm 5 quyết định DL-005 → DL-009: nơi code, khung thư mục, CERT r4.2, môi trường, hoãn cách chia dữ liệu; chưa code bước nào |
+| 0.2 | 2026-11-02 | Bản mô tả thiết kế và khung dự án trước triển khai. |
+| 0.7 | 2026-11-06 | Cập nhật theo code và kiểm chứng SPEC-001; bản local, chờ đồng bộ Google Doc. |
+| 0.12 | 2026-11-07 | Bổ sung hai case ba tầng, score và threshold theo SPEC-002; bản local, Google Doc chưa đồng bộ. |
+| 0.15 | 2026-11-07 | Ghi kết quả train/Calibration CERT, split và chính sách train đã chốt; test đánh giá chưa mở, Google Doc chưa đồng bộ. |
+| 0.16 | 2026-11-07 | Ghi kết quả test lần 1 và metric đã đối soát; cập nhật local, Google Doc chưa đồng bộ. |
+| 0.17 | 2026-11-07 | Ghi kết quả audit raw, nhãn, lịch sử, score và metric; giữ nguyên mô hình; Google Doc chưa đồng bộ. |
+| 0.19 | 2026-11-07 | Hoàn thiện tài liệu bàn giao hai case ba tầng, backoff, ngưỡng và kết quả; xuất file Word để đưa lên Google Docs. |
+| 0.26 | 2026-11-09 | Bổ sung phạm vi bàn giao, nghiệm thu kỹ thuật và ví dụ đọc output sau lần chạy lại train/Calibration; không đánh giá test mới. |
+
+## 10. Bàn giao và nghiệm thu kỹ thuật
+
+Hai case đã chạy lại train/Calibration ngày 2026-11-09 trong 40.990708 giây, sử dụng cùng dữ liệu và các tham số đã duyệt. Department có threshold 0.8423588864100263; Role có threshold 0.8115505803240236. Mỗi case có 84.066 dòng Calibration, 841 dòng vượt threshold. Kết quả khớp lần Calibration trước.
+
+Kiểm chứng phần mềm gần nhất: 101 test qua trong 3.59 giây. Đối soát từng dòng Calibration xác nhận cùng nhân viên/ngày giữa hai case; score và trọng số hữu hạn; trọng số không âm và tổng bằng 1; threshold khớp p99 linear tính lại; cờ cảnh báo khớp điều kiện score lớn hơn threshold.
+
+Bản nghiệm thu kỹ thuật có sơ đồ và bảng đối chiếu yêu cầu với code/test tại docs/spec002-acceptance.md. Đây là kết quả kiểm chứng kỹ thuật để người dùng review, chưa ghi nhận người dùng đã chính thức duyệt nghiệm thu. Hướng dẫn chạy nằm tại docs/three-tier-usage.md. Run được lưu riêng tại runs/20261109-three-tier-calibration; bằng chứng nghiệm thu tại runs/20261109-spec002-acceptance. Lần này không chấm lại test nghiên cứu.
+
+## 11. Ví dụ đọc kết quả
+
+Các ví dụ lấy từ Calibration đã lưu, không đối chiếu nhãn để chọn ví dụ. Score không phải xác suất độc hại; cảnh báo là tín hiệu cần xem xét, không xác nhận insider.
+
+| Nhân viên/ngày | Case | Score cuối | Threshold | Cảnh báo |
+|---|---|---:|---:|---|
+| AAE0190 / 2010-06-01 | Department | 0.189864 | 0.842359 | Không |
+| AAE0190 / 2010-06-01 | Role | 0.066263 | 0.811551 | Không |
+| BJM0111 / 2010-06-01 | Department | 0.918259 | 0.842359 | Có |
+| BJM0111 / 2010-06-01 | Role | 1.017111 | 0.811551 | Có |
+
+AAE0190 có 20 ngày lịch sử nên trọng số Personal bằng 20/(20+7), khoảng 74,07%. Với Department, nhóm có 6 người; phần trọng số còn lại phân cho Group khoảng 17,28% và Global khoảng 8,64%. Score cuối là tổng score từng tầng nhân trọng số tương ứng. Hai case giữ cùng Personal và Global; định nghĩa Group khác nhau làm score Group và phần trọng số còn lại khác nhau.
+
+Khi Personal dưới 2 ngày, tầng này không tham gia kết hợp. Khi Group thiếu hoặc dưới 2 người, hệ thống chuyển phần kết hợp về Personal/Global. Nếu cả hai tầng không đủ dữ liệu, dùng Global. Score tầng không khả dụng để trống, không hiểu là score bằng 0.
+
+Hướng dẫn đầy đủ từng cột và cách tính: docs/three-tier-output-guide.md. Cảnh báo trên Calibration là kết quả nhìn lại tập đã dùng hiệu chỉnh threshold, không phải FPR hay hiệu quả trên tập độc lập. Các ví dụ không dùng để chọn case hoặc thay đổi tham số.
