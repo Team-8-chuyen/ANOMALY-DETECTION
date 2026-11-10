@@ -18,7 +18,7 @@ Bản 2026-11-09 · Version 0.9
 | C1 Dữ liệu & nhãn | SPEC-001 v1.1 | Xong code; có resume | 6/6 | smoke hàm |
 | C2 Luồng đặc trưng | SPEC-001 v1.1 | Xong code; checkpoint/bucket | 6/6 | smoke hàm |
 | C3 Luồng chuỗi | SPEC-001 v1.1 | Xong code; checkpoint/bucket | 6/6 | smoke hàm |
-| C4 Hợp nhất điểm | | Chưa làm | | |
+| C4 Hợp nhất điểm | SPEC-002 v1.0 | Xong code; chưa chạy full | 15/15 | synthetic smoke |
 | C5 Chuẩn 3 tầng | | Chưa làm | | |
 | C6 Ngưỡng thích ứng | | Chưa làm | | |
 | C7 Đánh giá & ablation | | Chưa làm | | |
@@ -61,8 +61,12 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python scripts\prepare_data.py --config configs/base.yaml
 # tiếp tục sau khi tắt máy hoặc tiến trình bị dừng
 .\.venv\Scripts\python scripts\prepare_data.py --config configs/base.yaml --resume
-# train / tune / evaluate — chưa có
-# test — chưa có
+# chuẩn bị dữ liệu model và huấn luyện không giám sát; chưa tự chạy full
+\.venv\Scripts\python scripts\prepare_model_data.py --config configs/base.yaml
+\.venv\Scripts\python scripts\train.py --config configs/base.yaml --branch behaviour
+\.venv\Scripts\python scripts\train.py --config configs/base.yaml --branch sequence
+\.venv\Scripts\python scripts\score.py --behaviour runs/<beh-run>/behaviour_scores.parquet --sequence runs/<seq-run>/sequence_scores.parquet --output runs/<fusion-run>/scores.parquet
+# evaluate test — chưa chạy; cần xác nhận riêng trước khi mở test
 ```
 
 ## 9. Open Questions
@@ -71,8 +75,6 @@ OQ-02 và OQ-03 hoãn tới sau khi code C1 (DL-009): không chặn SPEC C1, nh�
 
 | # | Câu hỏi | A (đề xuất) | B | C | Chặn |
 |---|---|---|---|---|---|
-| OQ-02 | Tỉ lệ chia thời gian train/val/test (D-02) | ~60/15/25 theo tháng | 50/20/30 | Train cố định N tháng đầu, phần còn lại test theo tuần | Lần train đầu tiên (C2/C3) |
-| OQ-03 | Ngày độc hại rơi vào train (D-03) | Loại khỏi train, ghi rõ giả định "baseline sạch" | Giữ nguyên (thuần không giám sát) | Loại toàn bộ user insider khỏi train | Lần train đầu tiên (C2/C3) |
 
 Câu đã trả lời → ghi Decision Log rồi xoá dòng ở đây (không đánh số lại).
 
@@ -89,6 +91,9 @@ Câu đã trả lời → ghi Decision Log rồi xoá dòng ở đây (không đ
 | 0.7 | 2026-11-09 | Hoàn thành code SPEC-001; 4/4 test qua; full CERT chưa chạy | DL-015 |
 | 0.8 | 2026-11-09 | Duyệt checkpoint theo user bucket và chế độ resume của SPEC-001 v1.1 | DL-016 |
 | 0.9 | 2026-11-09 | Hoàn thành checkpoint/resume, process lock và ETA; 6/6 test qua | DL-017 |
+| 1.0 | 2026-11-10 | Chốt thiết kế train không giám sát và tạo SPEC-002 v0.1 chờ duyệt | DL-018 → DL-021 |
+| 1.1 | 2026-11-10 | Người dùng duyệt SPEC-002 v1.0 và cho phép bắt đầu code model | DL-022 |
+| 1.2 | 2026-11-10 | Hoàn thành code hai Autoencoder, trainer, score fusion và 15 test; chưa chạy full training | DL-023 |
 
 ## 11. Decision Log
 
@@ -113,3 +118,9 @@ Mỗi thay đổi về thiết kế, tham số, dữ liệu, code, hoặc phạm
 | DL-015 | SPEC-001 · C1–C3 | **Triển khai tiền xử lý theo bucket user và Parquet nén Zstandard; chưa tự chạy full CERT** | Bucket giữ toàn bộ lịch sử của một user để tính quá khứ đúng nhưng giới hạn RAM. 4/4 test và smoke chuẩn hóa qua. **Phương án bị loại**: nạp toàn bộ log vào RAM; tự chạy full dữ liệu nhiều giờ khi người dùng chưa yêu cầu | 2026-11-09 |
 | DL-016 | SPEC-001 v1.1 · vận hành | **Checkpoint và resume theo `user_bucket`; không checkpoint theo ngày hoặc bucket-tháng** | Người dùng duyệt phương án A ngày 09/11/2026. Toàn bộ lịch sử một user nằm cùng bucket nên tắt/mở máy không làm sai đặc trưng 7/30 ngày. Bucket đang dở được làm lại; bucket hoàn thành được giữ nguyên | 2026-11-09 |
 | DL-017 | SPEC-001 v1.1 · code | **`--resume` bỏ qua canonical đã đủ năm nguồn, checkpoint sau mỗi bucket và dùng lock chống chạy trùng** | 6/6 test qua. Checkpoint chỉ được ghi sau khi đủ output nên mất điện không đánh dấu nhầm bucket dở. **Phương án bị loại**: tin vào sự tồn tại của một tệp đơn lẻ; cho nhiều pipeline chạy đồng thời | 2026-11-09 |
+| DL-018 | D-02 · split | **Chia thời gian train/validation/test xấp xỉ 60/15/25 trên cùng trục ngày** | Người dùng chọn bộ khuyến nghị ngày 10/11/2026. Giữ thứ tự thời gian và dành test đủ dài. **Phương án bị loại**: 50/20/30; đánh giá online theo tuần | 2026-11-10 |
+| DL-019 | D-03 · unsupervised | **Giữ nguyên các user-day độc hại nếu rơi vào train; nhãn không được dùng trong huấn luyện hoặc chọn tham số** | Khớp yêu cầu học không giám sát nghiêm ngặt. **Phương án bị loại**: dùng answers làm sạch train; loại toàn bộ insider | 2026-11-10 |
+| DL-020 | D-04 · Sequence | **TCN–Transformer Autoencoder tái tạo token và thuộc tính sự kiện** | Khớp nguyên tắc hai nhánh tái tạo độc lập và tạo reconstruction error trực tiếp. **Phương án bị loại**: masked prediction; next-token prediction | 2026-11-10 |
+| DL-021 | D-06 · fusion | **Cố định alpha=0.5 sau chuẩn hóa robust riêng từng nhánh; chỉ phân tích độ nhạy alpha** | Cân bằng hai nhánh mà không dùng nhãn. **Phương án bị loại**: cân phương sai trên validation; learned gating | 2026-11-10 |
+| DL-022 | SPEC-002 | **Duyệt SPEC-002 v1.0 và bắt đầu triển khai hai model không giám sát** | Người dùng trả lời “sửa code đi” sau khi được trình SPEC-002 READY | 2026-11-10 |
+| DL-023 | SPEC-002 · code | **Triển khai Behaviour AE, TCN–Transformer AE, split thời gian, parser nhãn r4.2, trainer checkpoint/resume và late fusion** | 15/15 test qua trên Python 3.11 + PyTorch 2.15 CPU; CLI help chạy được. Chưa chạy chuẩn bị model data hoặc full training để không tự mở test/tốn nhiều giờ. **Phương án bị loại**: tự chạy full ngay; để label đi vào trainer | 2026-11-10 |

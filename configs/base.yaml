@@ -3,7 +3,7 @@
 # Tên khoá bám ký hiệu trong references/model-design.md và có thể đổi khi spec chốt (spec là chuẩn).
 # Config đã gộp của mỗi lần chạy được ghi ra runs/<id>/config.yaml.
 
-seed: null
+seed: 42
 
 paths:
   raw: data/raw/cert-r4.2
@@ -21,8 +21,9 @@ data:
   source_priority: [logon, device, file, http, email]
 
 split:                # C1
-  scheme: null        # D-02 — hoãn tới sau khi code C1 (DL-009)
-  malicious_in_train: null  # D-03 — hoãn tới sau khi code C1 (DL-009)
+  scheme: chronological_ratio
+  ratios: [0.60, 0.15, 0.25]
+  malicious_in_train: keep
 
 features:
   count: 100
@@ -39,30 +40,32 @@ sequence:
   gap_bucket_minutes: [0, 1, 5, 15, 60, 240]
 
 feature_ae:           # C2 — khoảng tune ở tuning-protocol.md §3
-  latent: null
-  hidden: null
-  dropout: null
-  lr: null
-  weight_decay: null
-  batch_size: null
-  max_epochs: null
-  patience: null
+  latent: 32
+  hidden: [128, 64]
+  dropout: 0.1
+  lr: 0.001
+  weight_decay: 0.00001
+  batch_size: 512
+  max_epochs: 200
+  patience: 10
 
 seq_transformer:      # C3
-  objective: null     # D-04
-  d_model: null
-  n_layers: null
-  n_heads: null
-  ff_mult: null
-  dropout: null
-  lr: null
-  mask_ratio: null
-  batch_size: null
-  max_epochs: null
-  patience: null
+  objective: reconstruction
+  d_model: 64
+  tcn_dilations: [1, 2, 4]
+  n_layers: 2
+  n_heads: 4
+  ff_mult: 2
+  dropout: 0.1
+  lr: 0.0005
+  weight_decay: 0.00001
+  batch_size: 32
+  effective_batch_size: 128
+  max_epochs: 200
+  patience: 7
 
 fusion:               # C4
-  alpha: null         # D-06
+  alpha: 0.5
 
 tiers:                # C5
   placement: null     # D-08

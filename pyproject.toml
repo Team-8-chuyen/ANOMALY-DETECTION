@@ -12,6 +12,7 @@ dependencies = [
   "pyarrow>=16,<20",
   "polars>=1.32,<2",
   "PyYAML>=6,<7",
+  "torch>=2.4,<3",
 ]
 
 [project.optional-dependencies]
