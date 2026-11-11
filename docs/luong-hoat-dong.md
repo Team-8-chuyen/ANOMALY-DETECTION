@@ -1,8 +1,10 @@
 # Phát hiện Insider Threat — Luồng hoạt động của hệ thống
 
-Cập nhật 2026-11-09 · Bản 0.26 · Tài liệu bàn giao kiến trúc ba tầng đã chạy và audit
+Cập nhật 2026-11-11 · Bản 0.28 · Bộ chọn một tầng và giao diện nhận điểm ngoài đã triển khai
 
 ## 1. Tổng quan
+
+**Cập nhật phương pháp:** bộ chọn duy nhất một tầng Personal → Group → Global và giao diện nhận điểm ngoài đã triển khai theo SPEC-002 v1.2, xem §13. Bộ dữ liệu đã ghép LDAP theo SPEC-001 v1.1. Phần trộn điểm, công thức trọng số và các kết quả score trước đây bên dưới là lịch sử, không phải phương pháp mới. Điểm mô hình, Calibration và so sánh hiệu quả chưa có trong phiên bản routing-only hiện tại.
 
 Phạm vi nhiệm vụ hiện tại chỉ là kiến trúc ba tầng theo SPEC-002, gồm hai case Department/Role. Không triển khai mở rộng feature SPEC-003 hoặc toàn bộ framework. Ghép LDAP và kiểm tra dữ liệu là các bước hỗ trợ để hai case chạy đúng.
 
@@ -197,6 +199,8 @@ Chạy hai case trên fixture đã lưu; chọn run-dir mới mỗi lần:
 | 0.17 | 2026-11-07 | Ghi kết quả audit raw, nhãn, lịch sử, score và metric; giữ nguyên mô hình; Google Doc chưa đồng bộ. |
 | 0.19 | 2026-11-07 | Hoàn thiện tài liệu bàn giao hai case ba tầng, backoff, ngưỡng và kết quả; xuất file Word để đưa lên Google Docs. |
 | 0.26 | 2026-11-09 | Bổ sung phạm vi bàn giao, nghiệm thu kỹ thuật và ví dụ đọc output sau lần chạy lại train/Calibration; không đánh giá test mới. |
+| 0.27 | 2026-11-11 | Ghép LDAP cho feature/sequence/OCEAN đã tiền xử lý; chưa sửa xong SPEC-002 chọn một tầng. |
+| 0.28 | 2026-11-11 | Triển khai SPEC-002 v1.2 chọn một tầng và giao diện điểm ngoài; 151 test qua, routing Calibration 100% Personal. |
 
 ## 10. Bàn giao và nghiệm thu kỹ thuật
 
@@ -222,3 +226,53 @@ AAE0190 có 20 ngày lịch sử nên trọng số Personal bằng 20/(20+7), kh
 Khi Personal dưới 2 ngày, tầng này không tham gia kết hợp. Khi Group thiếu hoặc dưới 2 người, hệ thống chuyển phần kết hợp về Personal/Global. Nếu cả hai tầng không đủ dữ liệu, dùng Global. Score tầng không khả dụng để trống, không hiểu là score bằng 0.
 
 Hướng dẫn đầy đủ từng cột và cách tính: docs/three-tier-output-guide.md. Cảnh báo trên Calibration là kết quả nhìn lại tập đã dùng hiệu chỉnh threshold, không phải FPR hay hiệu quả trên tập độc lập. Các ví dụ không dùng để chọn case hoặc thay đổi tham số.
+
+## 12. Ghép LDAP cho dữ liệu đã tiền xử lý — SPEC-001 v1.1
+
+Hệ thống đã nhận bộ feature và sequence có sẵn, bổ sung chức vụ và phòng ban đúng tháng cho từng dòng. Bước ghép giữ nguyên feature, mask, OCEAN và thứ tự chuỗi. Output mới nằm tại data/processed/CERT-r4.2-processed-two-branch-v1-ldap/; nguồn không bị sửa.
+
+| Nhánh output | File Parquet | Số dòng | Số nhân viên–ngày |
+|---|---:|---:|---:|
+| Feature hành vi | 64 | 330.452 | 330.452 |
+| Feature hành vi + OCEAN | 64 | 330.452 | 330.452 |
+| Sequence | 64 | 12.523.202 | 330.452 |
+
+| Quy tắc | Kết quả |
+|---|---|
+| Hệ thống tra mã nhân viên và tháng của ngày hoạt động. | Mỗi dòng thêm role, department, hai cờ thiếu và ldap_month. |
+| Hệ thống không lấy metadata tháng khác khi thiếu. | Role thiếu ở 1.793 user-day; Department thiếu ở 6.637 user-day; giữ dòng với UNKNOWN. |
+| Hệ thống đọc lại output và so toàn bộ cột gốc. | Giá trị, dtype, null, mask và thứ tự khớp; khóa/index được bảo toàn. |
+| Hệ thống kiểm hash nguồn và LDAP trong lần chạy. | Nguồn không thay đổi; hash Parquet khớp lần kiểm kê trước. |
+| Kiểm thử chạy trên fixture. | 21 test qua trong 13.81 giây; có kiểm đúng tháng, thiếu metadata, dữ liệu lỗi và bảo vệ output. |
+| Run dữ liệu thật hoàn tất trên CPU. | 296.898194 giây; không training, score hoặc threshold mới. |
+
+Số thiếu theo row sequence lớn hơn số user-day do một người có nhiều sự kiện trong ngày: 70.165 row thiếu Role, 300.323 row thiếu Department. f100 và các mask không được tính lại khi thêm LDAP.
+
+Hướng dẫn: docs/enrich-preprocessed-ldap-usage.md. Manifest đầy đủ trong output; bằng chứng và log ở runs/20261111-spec001-ldap-enrichment. Bộ chọn tầng và giao diện điểm đã triển khai tại §13; cách tạo điểm/Calibration vẫn là phần việc sau.
+
+## 13. Bộ chọn một tầng — SPEC-002 v1.2
+
+Hệ thống giữ hai case Group theo Department và Role. Mỗi user-day chỉ chọn một tầng theo dữ liệu quá khứ, không trộn điểm.
+
+| Điều kiện | Tầng được chọn |
+|---|---|
+| Nhân viên có ít nhất 7 ngày hoạt động trong 30 ngày trước ngày đang xét. | Personal; hệ thống dừng xét tầng cho user-day này. |
+| Personal thiếu nhưng Group hợp lệ có ít nhất 2 nhân viên riêng biệt trong train. | Group của case Department hoặc Role. |
+| Personal thiếu và Group missing, chưa thấy trong train hoặc quá nhỏ. | Global. |
+
+Lịch sử chung giữa hai case chỉ cập nhật sau khi xử lý xong toàn ngày. Group membership giữ cố định từ train. Thiếu điểm ngoài không làm hệ thống chuyển tầng.
+
+| Kết quả Calibration hiện tại | Department | Role |
+|---|---:|---:|
+| User-day được route | 84.066 | 84.066 |
+| Chọn Personal | 84.066 | 84.066 |
+| Chọn Group | 0 | 0 |
+| Chọn Global | 0 | 0 |
+
+Kiểm độc lập xác nhận mỗi dòng có 19–30 ngày lịch sử, đều đủ Personal. Vì Calibration này không có cold-start cần Group, kết quả không chứng minh Department hoặc Role tốt hơn. Các nhánh Group/Global đã được kiểm trên fixture; không tự đổi điều kiện để ép tạo khác biệt.
+
+Output ghi tầng, lý do và cỡ lịch sử; score để trống, trạng thái awaiting_external_score. Khi bên cung cấp có điểm, CSV phải đúng user/day/case/tầng và đủ toàn bộ row. Hệ thống nhận nguyên giá trị hữu hạn, không tự chuẩn hóa hoặc sinh threshold/cảnh báo. Điểm nhận vào chưa chứng minh cùng thang giữa các tầng.
+
+151 test qua trong 12.91 giây; run routing thật 6.723866 giây. Bằng chứng: runs/20261111-spec002-routing-validation và runs/20261111-spec002-tier-routing. Chỉ đọc metadata train/Calibration, không dùng feature/sequence/nhãn để tạo score và không đánh giá test.
+
+Hướng dẫn chạy và giao diện CSV: docs/three-tier-usage.md. Code: src/itd/scoring/routing.py, score_input.py và scripts/run_tier_routing.py. Bước tiếp theo khi có điểm mô hình là thiết kế Calibration/đánh giá cặp case trên cùng dữ liệu và protocol đã duyệt.

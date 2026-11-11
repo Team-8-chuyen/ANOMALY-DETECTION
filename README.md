@@ -1,8 +1,12 @@
 # Framework-rework — Phát hiện Insider Threat
 
-Pipeline nghiên cứu phát hiện insider threat trên CERT: hai luồng (đặc trưng + chuỗi) tái tạo riêng rồi hợp nhất điểm, chuẩn hành vi 3 tầng Personal–Group–Global, ngưỡng thích ứng theo người dùng; đánh giá theo RQ1–RQ3.
+Phạm vi đang bàn giao: ghép LDAP vào dữ liệu đã tiền xử lý theo SPEC-001 v1.1 và chọn duy nhất Personal → Group → Global theo SPEC-002 v1.2. Hai case dùng Group theo Department hoặc Role; điểm do bên ngoài cung cấp, chưa tạo threshold hoặc đánh giá hiệu quả phát hiện.
 
-Phạm vi hiện tại: **kiến trúc ba tầng Global–Group–Personal theo SPEC-002 đã triển khai**, gồm hai cấu hình Group theo Department hoặc Role. Xem [hướng dẫn chạy hai case](docs/three-tier-usage.md). Mô tả framework rộng hơn bên dưới là bối cảnh lịch sử, không phải phạm vi cần làm tiếp.
+Trạng thái: **đã triển khai, 151 test qua**. [Hướng dẫn chạy bộ chọn tầng](docs/three-tier-usage.md) · [Ghép LDAP](docs/enrich-preprocessed-ldap-usage.md). Code hiện tại chỉ cần hai CLI `scripts/enrich_preprocessed_ldap.py` và `scripts/run_tier_routing.py`, bốn config trong `configs/experiments/`, ba module hỗ trợ tương ứng, test và `requirements-ldap.txt`. Các mục C1–C7 bên dưới là cấu trúc nghiên cứu dự kiến, không phải danh sách tính năng đã triển khai.
+
+Môi trường Python, dữ liệu, run artifact và IDE settings được giữ local và loại khỏi Git. Các script prototype/bản xuất cũ không dùng ở lần chạy hiện tại được sao lưu trong `.local-archive/` (gitignored); dùng code/config/test/spec hiện hành để bàn giao.
+
+Các đường dẫn code/báo cáo cũ được nhắc trong phần lịch sử của spec và tài liệu nằm tại [commit 7331adf](https://github.com/Team-8-chuyen/ANOMALY-DETECTION/tree/7331adfe8807a62716f11dc4e920f9b4d20c66a8), không phải thành phần của pipeline hiện tại.
 
 ## Cấu trúc
 

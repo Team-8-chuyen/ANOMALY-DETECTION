@@ -1,0 +1,11 @@
+{
+  "paths": {
+    "feature_dir": "data/processed/CERT-r4.2-processed-two-branch-v1-ldap/user_day_features"
+  },
+  "split": {
+    "train": {"start": "2010-01-01", "end": "2010-05-31"},
+    "calibration": {"start": "2010-06-01", "end": "2010-09-30"}
+  },
+  "routing": {"window_days": 30, "min_personal_days": 7, "min_group_users": 2},
+  "batch_rows": 65536
+}

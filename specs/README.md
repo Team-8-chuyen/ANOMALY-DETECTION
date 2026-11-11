@@ -6,13 +6,14 @@ Mỗi spec là một tệp `SPEC-NNN-<slug>.md`, tạo từ `templates/spec-temp
 
 | Spec | Thành phần | Trạng thái | Version |
 |---|---|---|---|
-| [SPEC-001](SPEC-001-role-baseline-validation.md) | Hồ sơ ghép Role/validation hỗ trợ, không là nhiệm vụ riêng hiện tại | Implemented — giữ code phụ thuộc | 1.0 |
-| [SPEC-002](SPEC-002-three-tier-group-ablation.md) | Hai case Group Department/Role, score ba tầng và p99 Calibration | Implemented — đã chạy CERT và audit test lần 1 | 1.0 |
-| [SPEC-003](SPEC-003-context-features.md) | Đề xuất mở rộng feature ngoài nhiệm vụ | Withdrawn — không triển khai, DL-041 | 0.2 |
+| [SPEC-001](SPEC-001-role-baseline-validation.md) | Ghép LDAP vào feature/sequence Parquet; giữ lịch sử v1.0 | Implemented — 21 test qua; toàn bộ output đọc lại khớp | 1.1 |
+| [SPEC-002](SPEC-002-three-tier-group-ablation.md) | Chọn một tầng Department/Role và giao diện nhận điểm ngoài | Implemented — 151 test qua; routing thật, score chờ cung cấp | 1.2 |
+
+SPEC-003 đã bỏ theo yêu cầu người dùng. Nhiệm vụ hiện tại: sửa phương pháp chọn tầng và ghép LDAP vào bộ dữ liệu đã tiền xử lý; không mở rộng thành toàn bộ mô hình feature/sequence. Chi tiết yêu cầu đang làm rõ: [three-tier-routing-change.md](../docs/three-tier-routing-change.md).
 
 ## Thứ tự dự kiến
 
-**Phạm vi hiện tại chỉ là SPEC-002 (DL-041).** Bảng C1 → C7 bên dưới là lộ trình framework lịch sử, không phải danh sách nhiệm vụ được yêu cầu triển khai tiếp.
+Theo phụ thuộc C1 → C7; thứ tự và cách gộp thành phần vào từng spec hỏi người dùng trước khi viết.
 
 | Bước | Thành phần | Quyết định phải chốt trước |
 |---|---|---|

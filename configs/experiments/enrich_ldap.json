@@ -1,0 +1,10 @@
+{
+  "paths": {
+    "input_root": "data/processed/CERT-r4.2-processed-two-branch-v1",
+    "ldap_dir": "D:/CERT_r4.2/LDAP",
+    "output_root": "data/processed/CERT-r4.2-processed-two-branch-v1-ldap"
+  },
+  "branches": ["user_day_features", "user_day_features_ocean", "user_day_sequences"],
+  "batch_rows": 65536,
+  "compression": "zstd"
+}

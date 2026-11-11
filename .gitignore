@@ -8,6 +8,11 @@ runs/**
 !runs/.gitkeep
 .venv/
 .venv-validation311/
+.vscode/
+.local-archive/
+# Ignore the dataset roots so nested .gitkeep files cannot reappear in Changes.
+/data/processed/CERT-r4.2-processed-two-branch-v1/
+/data/processed/CERT-r4.2-processed-two-branch-v1-ldap/
 __pycache__/
 *.egg-info/
 .pytest_cache/
