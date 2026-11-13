@@ -2,72 +2,86 @@
 
 Tài liệu sống của project: hệ thống đang làm gì, đã code tới đâu, chạy thế nào, vì sao quyết định như vậy. Cập nhật **mỗi lần code**; mọi thay đổi có một dòng Decision Log.
 
-Bản 2026-11-02 · Version 0.4
+Bản 2026-11-12 · Version 0.31 · LDAP/router và pilot IF + LSTM đã chạy
 
 ## 1. Tổng quan
 
-- **Mục tiêu**: phát hiện insider threat bằng anomaly detection kết hợp 2 luồng (chuỗi + đặc trưng), chuẩn hành vi 3 tầng Personal – Group – Global, ngưỡng thích ứng.
+- **Phạm vi đã code**: ghép LDAP, chọn duy nhất Personal/Group/Global, Feature Isolation Forest và Sequence LSTM Autoencoder trên pilot CPU. Hai điểm thô là đầu vào cho bước hợp nhất/chuẩn tầng/threshold được thiết kế nối tiếp.
 - **Câu hỏi nghiên cứu**: RQ1 · RQ2 · RQ3 (nguyên văn: `references/research-proposal.md` của skill `insider-threat-model-dev`).
-- **Dữ liệu**: CERT r4.2 (DL-007). Số user, số insider, khoảng ngày ghi sau khi đếm từ dữ liệu thật.
-- **Nơi code**: `D:\AI for BA\MW\Framework-rework` (DL-005). Cấu trúc thư mục: `README.md` § Cấu trúc.
+- **Dữ liệu**: CERT r4.2 đã tiền xử lý và ghép LDAP, xem §3.
+- **Nơi code hiện tại**: `C:\Users\Admin\Projects\ANOMALY-DETECTION`. Đường dẫn khác trong Decision Log là lịch sử các phiên trước.
 
 ## 2. Trạng thái thành phần
 
 | Thành phần | Spec | Trạng thái | Test | Run gần nhất |
 |---|---|---|---|---|
-| C1 Dữ liệu & nhãn | | Chưa làm | | |
-| C2 Luồng đặc trưng | | Chưa làm | | |
-| C3 Luồng chuỗi | | Chưa làm | | |
-| C4 Hợp nhất điểm | | Chưa làm | | |
-| C5 Chuẩn 3 tầng | | Chưa làm | | |
-| C6 Ngưỡng thích ứng | | Chưa làm | | |
-| C7 Đánh giá & ablation | | Chưa làm | | |
+| C1 Ghép dữ liệu LDAP | SPEC-001 v1.1 | Xong enrichment và đối soát bảo toàn | test_enrich_ldap.py | 20261111-spec001-ldap-enrichment |
+| C2 Feature Isolation Forest | SPEC-004 v1.0 | Xong pilot CPU | test_feature_preprocessing.py, test_feature_isolation_forest.py | 20261112-if-lstm-cpu-pilot-01 |
+| C3 Sequence LSTM AE | SPEC-004 v1.0 | Xong pilot CPU một epoch | test_sequence_*.py, test_lstm_autoencoder.py | Cùng pilot IF |
+| C4 Hợp nhất điểm | — | Chưa triển khai cho hai raw score | — | — |
+| C5 Bộ chọn ba tầng/giao diện điểm | SPEC-002 v1.2 | Xong router một tầng, hai case Department/Role | test_routing.py, test_score_input.py, test_tier_routing_cli.py | 20261111-spec002-tier-routing |
+| C6 Threshold cuối | — | Chờ protocol score/Calibration mới | — | — |
+| C7 Đánh giá ablation | — | Chưa đánh giá hai model mới | — | — |
 
 Trạng thái: Chưa làm · Spec draft · Spec accepted · Đang code · Xong · Cần sửa.
 
 ## 3. Dữ liệu
 
-Chưa có. Điền khi C1 code xong: nguồn, đường dẫn, số dòng thực mỗi tệp; khoảng ngày train / val / test; số user-day và số user-day độc hại mỗi tập; quy tắc lọc user, cách gán nhãn.
+Nguồn `data/processed/CERT-r4.2-processed-two-branch-v1-ldap/` giữ cùng 330.452 user-day ở Feature, Feature+OCEAN và Sequence. Sequence có 12.523.202 row run nén. LDAP được ghép đúng tháng; role/department thiếu vẫn giữ UNKNOWN và cờ thiếu.
+
+Pilot dùng Feature100+mask100 và Sequence24 trên cùng 20 nhân viên, fit 02–22/01/2010 và validation 23–31/01. Nguồn train nghiên cứu 01–05/2010 có 0 malicious user-day theo audit đã đối chiếu; chính sách loại user-day độc hại giữ nguyên DL-034. Calibration 06–09/2010 và test 10/2010–05/2011 giữ nguyên ngoài pilot.
 
 ## 4. Pipeline
 
-Chưa code bước nào. Thư mục đã dựng sẵn cho từng thành phần C1–C7 (xem `README.md` § Thành phần ↔ chỗ đặt code).
+Hệ thống kiểm tra provenance và khóa hai nhánh, fit preprocessor từ train rồi chạy IF/LSTM. Mỗi ngày validation có hai điểm thô riêng. Bộ chọn Personal/Group/Global của SPEC-002 tiếp tục hoạt động trên metadata quá khứ; hợp nhất/chuẩn hóa raw score và threshold là bước phát triển sau (→ DL-055/067/070).
 
 ## 5. Thành phần
 
-Điền khi từng thành phần code xong.
+| Thành phần đang dùng | Tệp chính |
+|---|---|
+| Đọc/chuẩn bị hai nhánh | src/itd/data/pilot_dataset.py, feature_preprocessing.py, sequence_dataset.py, sequence_preprocessing.py |
+| Hai model | src/itd/models/feature_isolation_forest.py, lstm_autoencoder.py |
+| Training/đo/provenance/config | src/itd/training/sequence_trainer.py, pilot_benchmark.py, pilot_provenance.py, pilot_config.py |
+| CLI và hướng dẫn | scripts/run_if_lstm_pilot.py; docs/if-lstm-cpu-pilot-usage.md |
 
-## 6. Tham số đã tinh chỉnh
+## 6. Cấu hình pilot đã chạy
 
-| Tầng | Tham số | Giá trị | Khoảng tìm | Mục tiêu (val) | Trial | Run |
-|---|---|---|---|---|---|---|
+| Thành phần | Cấu hình |
+|---|---|
+| IF | 100 cây, tối đa256 mẫu/cây, median fit +mask thành200 đầu vào |
+| LSTM AE | Embedding4, encoder/decoder một lớp hidden32, latent16, window128 |
+| Training | CPU2thread, batch64, một epoch, AdamW lr0.001, seed0, ngân sách300s |
+| Warmup | Ba bước trên model tạm, bỏ weights và reset RNG trước epoch thật |
+| Nguồn cấu hình | configs/experiments/if_lstm_cpu_pilot.json |
+
+Các giá trị là cấu hình pilot đã duyệt, chưa được tune bằng Optuna. Chi tiết và công thức nằm trong SPEC-004 v1.0.
 
 ## 7. Thí nghiệm & kết quả
 
-| Ngày | Run | Cấu hình | RQ | PR-AUC | Recall@1% | FPR | Ghi chú |
-|---|---|---|---|---|---|---|---|
+| Run ngày2026-11-12 | Số đo thật |
+|---|---|
+| 20261112-if-lstm-cpu-pilot-01 | Complete;305 fit và103 validation user-day;12159/4052 sequence row |
+| Fit IF / chấm validation | 0,22296s /0,00691s |
+| Một epoch LSTM / chấm validation | 1,08128s /0,22207s |
+| Đọc dữ liệu / tổng wall | 11,37159s /24,64685s |
+| Đầu ra | 103 row hai raw score hữu hạn; LSTM23.443 tham số |
+| Ngoại suy theo sequence steps | 355,60s/epoch full train;20epoch giả định1,98giờ |
+| Ngoại suy theo user-day | 372,85s/epoch full train;20epoch giả định2,07giờ |
 
-Lần mở test: 0.
+Hai ngoại suy không là CI hoặc cận; chỉ training, chưa đo full IF/full validation/full total. Pilot không mở test nghiên cứu và chưa có chỉ số phát hiện. Kết quả test thống kê cũ thuộc lịch sử SPEC-002.
 
 ## 8. Cách chạy
 
-```bash
-# môi trường — venv Python 3.11 + PyTorch CUDA (DL-008); chưa tạo, lệnh ghi ở đây khi SPEC-001 code xong
-# chuẩn bị dữ liệu — chưa có
-# train / tune / evaluate — chưa có
-# test — chưa có
+```powershell
+.\.venv-validation311\Scripts\python.exe -m pytest -q
+.\.venv-validation311\Scripts\python.exe scripts/run_if_lstm_pilot.py --config configs/experiments/if_lstm_cpu_pilot.json --run-dir runs/20261112-if-lstm-cpu-pilot-01
 ```
+
+Lệnh pilot trên đã chạy; chạy lại dùng run ID mới. Môi trường CPU đã cài pin requirements-models-cpu.txt. Hướng dẫn đầy đủ: docs/if-lstm-cpu-pilot-usage.md; phần LDAP/router: docs/three-tier-usage.md.
 
 ## 9. Open Questions
 
-OQ-02 và OQ-03 hoãn tới sau khi code C1 (DL-009): không chặn SPEC C1, nhưng phải chốt trước lần train đầu tiên. Các D-xx còn lại hỏi khi spec chạm tới.
-
-| # | Câu hỏi | A (đề xuất) | B | C | Chặn |
-|---|---|---|---|---|---|
-| OQ-02 | Tỉ lệ chia thời gian train/val/test (D-02) | ~60/15/25 theo tháng | 50/20/30 | Train cố định N tháng đầu, phần còn lại test theo tuần | Lần train đầu tiên (C2/C3) |
-| OQ-03 | Ngày độc hại rơi vào train (D-03) | Loại khỏi train, ghi rõ giả định "baseline sạch" | Giữ nguyên (thuần không giám sát) | Loại toàn bộ user insider khỏi train | Lần train đầu tiên (C2/C3) |
-
-Câu đã trả lời → ghi Decision Log rồi xoá dòng ở đây (không đánh số lại).
+OQ-02/03 đã chốt qua DL-033/034; OQ-17 mask đã chốt DL-069. Không còn câu hỏi chặn SPEC-004 pilot. Protocol hợp nhất điểm, chuẩn tầng và Calibration cần thiết kế riêng khi người dùng yêu cầu bước tiếp theo.
 
 ## 10. Version History
 
@@ -77,6 +91,7 @@ Câu đã trả lời → ghi Decision Log rồi xoá dòng ở đây (không đ
 | 0.2 | 2026-11-02 | Chốt CERT r4.2 và môi trường Python 3.11 + CUDA; hoãn chia tập và xử lý ngày độc hại trong train tới sau khi code C1 | DL-007 → DL-009 |
 | 0.3 | 2026-11-02 | Đẩy Google Doc bản 0.2 (thêm DL-005 → DL-009, tham số CERT r4.2, 4 thuật ngữ); người dùng yêu cầu đẩy trước khi code | — |
 | 0.4 | 2026-11-02 | Đưa project + skill lên GitHub nhánh `master`, thay toàn bộ framework cũ | DL-010 |
+| 0.31 | 2026-11-12 | Hoàn tất code và pilot IF + LSTM CPU; đồng bộ trạng thái hiện hành, kết quả và hướng dẫn | SPEC-004 v1.0, DL-070–072 |
 
 ## 11. Decision Log
 
@@ -157,3 +172,59 @@ Kiểm chứng sau dọn: Changes giảm từ 2.691 xuống 26 file; 151 test qu
 | ID | Quyết định / kiểm chứng | Trạng thái |
 |---|---|---|
 | DL-061 | Người dùng yêu cầu push nhánh riêng và tạo PR. Đóng gói latest26 trong checkout riêng từ thanhhuong/three-tier; bỏ 23 file chỉ thuộc implementation cũ, giữ lịch sử commit7331adf | 151 test qua trong 11.29s trên chính checkout đóng gói. Diff mục tiêu vào master là 26 file code/config/test/spec/tài liệu; không chứa dataset, environment, secret hoặc run artifact. Không merge tự động |
+
+## Hướng training mới — 2026-11-12
+
+| ID | Quyết định | Trạng thái |
+|---|---|---|
+| DL-062 | Người dùng đổi hướng: không dùng hybrid TCN–Transformer Autoencoder; chỉ một mô hình chuỗi, không train Feature AE trong đợt này | Tên TCN Autoencoder hay Transformer Autoencoder còn chờ xác nhận. Không thay code router, chưa cài PyTorch hoặc training |
+| DL-063 | Giữ lựa chọn kiểm thử mô hình nhỏ trên CPU trước, training đầy đủ trên GPU sau | Theo câu trả lời trước của người dùng. Kiểm tra môi trường hiện chỉ thấy Intel Iris Xe, PyTorch chưa cài; bằng chứng train-only sequence lengths: runs/20261111-training-feasibility/summary.json |
+| DL-064 | Người dùng chọn **TCN Autoencoder đơn**, bản nhỏ kiểm thử CPU | Đã xác nhận tên model, thay trạng thái chờ xác nhận ở DL-062. Không train Feature AE hoặc hybrid TCN–Transformer trong đợt này |
+| DL-065 | Người dùng chọn tái tạo **cả 24 thuộc tính sequence**, có mask và loss phù hợp trường dạng chữ/số/đúng-sai | Thay lựa chọn chỉ tái tạo event_token. Thiết kế chi tiết embedding/loss/kiến trúc trong SPEC-004 Draft0.1, chờ duyệt trước code |
+| DL-066 | Người dùng chọn pilot **tối đa 20 nhân viên trong 01/2010; fit 02–22/01, validation 23–31/01** | Giữ nguyên Calibration/test nghiên cứu ngoài pilot, không dùng để early stop. Quy tắc chọn cohort có seed và cấu hình training cụ thể đang trình trong SPEC-004 |
+
+Lịch sử: SPEC-004 Draft0.1 TCN đã trình nhưng chưa được duyệt. Bản đang sửa chuyển sang [SPEC-004 — IF + LSTM CPU pilot](../specs/SPEC-004-if-lstm-cpu-pilot.md), Draft0.2 theo DL-067–069. Kiểm kê read-only theo cohort hash seed0: fit12.159 sequence row/305user-day, validation4.052row/103user-day,20user; chưa training/cài PyTorch. Evidence: runs/20261112-tcn-spec-evidence/pilot-inventory.json. Giữ SPEC-001/002 và Department/Role; SPEC-003 tiếp tục đã rút.
+
+Version History bổ sung: 0.29-draft, 2026-11-12 — DL-062–066, chuẩn bị spec model chuỗi đơn theo yêu cầu mới; chưa cập nhật Google Doc trong giai đoạn spec.
+
+## Đánh giá hướng Isolation Forest + LSTM Autoencoder — 2026-11-12
+
+| ID | Quyết định / yêu cầu | Trạng thái |
+|---|---|---|
+| DL-067 | Người dùng yêu cầu hướng hai model riêng: **Feature = Isolation Forest; Sequence = LSTM Autoencoder**, trước hết ước tính runtime và nhận xét phương pháp | Thay hướng TCN đơn ở DL-064 cho thiết kế tiếp theo. SPEC-004 TCN hiện vẫn Draft, chưa được accept hoặc triển khai; cần sửa thiết kế trước khi code theo hướng mới. Lần này chỉ kiểm môi trường/dữ liệu và tư vấn, không cài thư viện hoặc training |
+
+Môi trường đọc lại: CPU i5-1135G7 @2.40GHz, 8 logical processor, RAM vật lý khả dụng cho hệ điều hành 11.73 GiB, RAM trống lúc đo 1.42 GiB; Python 3.11.9, chưa có torch hoặc sklearn. Dữ liệu train nghiên cứu có 105.171 user-day, sequence có 3.998.777 row nén, chiều dài tối đa124; pilot tháng01/2010 có305 fit và103 validation user-day. Hai model dùng chung cho các user/case; không dự toán model riêng cho mỗi user/nhóm.
+
+**Ước lượng dự trù, chưa benchmark:** IF100–200 cây, max_samples256, 100 feature gốc và xử lý mask: fit khối lượng train khoảng10–60s, score330.452 user-day khoảng10–120s. LSTM encoder/decoder nhỏ mỗi phía1layer, hidden32–64, batch64, window≤128, đủ Sequence24 typed loss/mask: khoảng2–12phút/epoch ở khối lượng train trên;20epoch khoảng40phút–4giờ chỉ training. Pilot305 fit user-day/5epoch khoảng1–5phút. Dự trù đầu-cuối một lần đầy đủ khoảng1–5giờ gồm I/O/validation/scoring, chưa gồm cài đặt, code/test, Optuna hoặc nhiều seed; có thể lệch vài lần do RAM, padding, backend và kiến trúc. Không có cam kết thời gian trên máy khi chưa đo1epoch thực tế.
+
+Nhận xét: hai nhánh bổ sung tín hiệu tổ hợp feature và thứ tự trong ngày; cần chuẩn chiều/thang điểm trước hợp nhất và áp chuẩn duy nhất ở tầng được chọn rồi threshold cuối trên Calibration. IF là isolation score, không phải reconstruction error; hướng mới cần mô tả Method tương ứng. Không kết luận hơn TCN hoặc Department/Role. Calibration hiện đều Personal, cần một protocol cold-start riêng được định nghĩa trước khi so sánh Group. Nguồn tham chiếu: [scikit-learn IsolationForest](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.IsolationForest.html), [LSTM encoder-decoder gốc](https://arxiv.org/abs/1607.00148).
+
+| ID | Quyết định | Trạng thái |
+|---|---|---|
+| DL-068 | Người dùng chọn **A: pilot IF + LSTM AE trên cùng 20 nhân viên, đo một epoch LSTM trước khi dự toán đầy đủ** | Giữ fit 02–22/01/2010, validation 23–31/01, train sạch và Sequence24 typed loss/mask đã chọn. SPEC-004 cần sửa thành Draft0.2; lựa chọn pilot không thay việc duyệt thiết kế mới trước code |
+| DL-069 | Người dùng chọn **IF điền median của train vào feature mask=false, ghép100 cờ mask thành200 đầu vào** | Thay lựa chọn điền0 hoặc bỏ mask. Median chỉ fit từ ô active của train; masked payload không là quan sát thật. Kiểm kê305 feature row của pilot:76 feature luôn active,24 feature có ô không áp dụng, không feature nào hoàn toàn inactive |
+
+Đã hoàn thiện [SPEC-004 v0.2 — IF + LSTM CPU pilot](../specs/SPEC-004-if-lstm-cpu-pilot.md): IF100cây/max_samples256, LSTM một lớp hidden32/latent16, batch64, **đúng một epoch** trên cùng20user;305 fit và103 validation user-day. Các tham số là đề xuất trình duyệt, chưa được ghi thành kết quả training. Có12AC, raw score riêng hai nhánh, timing riêng và ngoại suy train dựa epoch hoàn chỉnh, không giả CI hoặc full total đã đo.
+
+Review spec ba vòng READY,0Blocker/0Major còn mở; review khoa học độc lập sửa một tên artifact cho thống nhất. Đổi tên file từ SPEC-004-tcn-autoencoder-cpu.md sang SPEC-004-if-lstm-cpu-pilot.md, giữ ID004 và lịch sử Draft0.1 trong spec/DL. Chưa code/cài dependency/chạy pilot hoặc cập nhật Google Doc. Version History bổ sung:0.30-draft,2026-11-12, DL-067–069, chờ duyệt bản sửa trước triển khai.
+
+| ID | Quyết định | Trạng thái |
+|---|---|---|
+| DL-070 | Người dùng nói rõ **“code đi, accept SPEC-004 v0.2”** ngày2026-11-12; duyệt thiết kế IF+LSTM CPU pilot thành SPEC-004 Accepted v1.0 | Được triển khai code/tests, cài dependency đã pin, chạy pilot20 nhân viên và một epoch LSTM. Giữ nguyên scope raw score/runtime, không full training/Calibration/test hoặc thay router |
+
+Tại thời điểm DL-070, C2 Feature IF và C3 LSTM AE bắt đầu code theo SPEC-004 v1.0. Các dòng Draft/chưa duyệt ở trên là lịch sử; kết quả bàn giao nằm sau DL-071/072.
+
+## Bàn giao IF + LSTM CPU pilot — 2026-11-12
+
+| ID | Kết quả / quyết định | Bằng chứng |
+|---|---|---|
+| DL-071 | Triển khai đúng SPEC-004 v1.0; pin dependencies đã cài. Sửa lỗi cơ học trong review: reader/provenance dùng cùng recursive coverage, canonical padded count, reset runtime khi ghi artifact lỗi, ghi hash code chưa tracked | 330 test qua43,91s; có kiểm warmup không giữ weights và score sau load checkpoint khớp; reviewer độc lập READY,0Blocker/0Major. JUnit runs/20261112-spec004-validation/pytest.xml |
+| DL-072 | Chạy pilot thật đúng một epoch trên cùng20 nhân viên, output103 row hai raw score. Giữ hai case Department/Role và chuẩn một tầng; ngoại suy từ epoch hoàn chỉnh, không gọi CI hoặc chạy full | Run runs/20261112-if-lstm-cpu-pilot-01 complete trong24,64685s; IFfit0,22296s; LSTMepoch1,08128s. Chi tiết và giới hạn docs/if-lstm-cpu-pilot-usage.md |
+
+**C2/C3 đã xong pilot; SPEC-004 v1.0 Implemented.** README, hướng dẫn sử dụng và Luồng hoạt động local bản0.31 phản ánh code/run thật. Full training, fusion/chuẩn tầng/Calibration và kết luận Group tốt hơn vẫn là bước sau.
+
+| ID | Thay đổi | Kết quả |
+|---|---|---|
+| DL-073 | Gửi Google Doc bản0.31 sau code READY và BA hoàn tất | Apps Script trả ok=true,78blocks tại2026-11-12T09:23:05.602Z. Không có connected document session; web export không truy cập được. Đã xác nhận gửi nhưng chưa review comment/readback online. Receipt runs/20261112-spec004-validation/gdoc-upload.json |
+
+Google Doc: [Tài liệu Code](https://docs.google.com/document/d/1rLFe6HQzlHrnTipuaOe5IsP8uqrMn_xPeig_IXZM7gc/edit), bổ sung §14 pilot hai model và cập nhật tổng quan; giữ riêng giới hạn xác nhận online.

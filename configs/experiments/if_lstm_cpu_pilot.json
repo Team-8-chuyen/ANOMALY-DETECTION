@@ -1,0 +1,44 @@
+{
+  "paths": {
+    "feature_dir": "data/processed/CERT-r4.2-processed-two-branch-v1-ldap/user_day_features",
+    "sequence_dir": "data/processed/CERT-r4.2-processed-two-branch-v1-ldap/user_day_sequences",
+    "clean_train_audit_dir": "runs/20261107-cert-label-audit",
+    "raw_label_audit": "runs/20261107-label-pipeline-audit/raw-audit.json",
+    "answers_manifest": "data/raw/cert-answers/download-manifest.json",
+    "source_prepare_manifest": "data/processed/CERT-r4.2-processed-two-branch-v1/artifacts/manifests/prepare_data.json",
+    "enrichment_run_dir": "runs/20261111-spec001-ldap-enrichment",
+    "ldap_dir": "D:/CERT_r4.2/LDAP"
+  },
+  "split": {
+    "fit_start": "2010-01-02",
+    "fit_end": "2010-01-22",
+    "validation_start": "2010-01-23",
+    "validation_end": "2010-01-31"
+  },
+  "data": {"max_users": 20, "seed": 0, "window_length": 128, "batch_rows": 65536},
+  "feature": {"impute": "median", "append_mask": true},
+  "sequence": {"scaler": "standard", "epsilon": 0.000001},
+  "isolation_forest": {
+    "n_estimators": 100, "max_samples": 256, "max_features": 1.0,
+    "bootstrap": false, "contamination": "auto", "n_jobs": 2
+  },
+  "lstm": {
+    "embedding_dim": 4, "hidden_size": 32, "latent_size": 16,
+    "num_layers": 1, "bidirectional": false, "dropout": 0,
+    "decoder_position": "local_fixed_window"
+  },
+  "loss": {
+    "categorical": "cross_entropy", "numeric": "mse", "boolean": "bce_logits",
+    "reduction": "valid_cell_mean"
+  },
+  "train": {
+    "device": "cpu", "dtype": "float32", "threads": 2, "num_workers": 0,
+    "batch_size": 64, "epochs": 1, "lr": 0.001,
+    "weight_decay": 0.00001, "grad_clip_norm": 1.0
+  },
+  "benchmark": {
+    "warmup_steps": 3, "max_seconds": 300,
+    "reference_train_days": 105171, "reference_train_steps": 3998777,
+    "reference_epochs": 20
+  }
+}

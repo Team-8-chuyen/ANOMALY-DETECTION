@@ -1,14 +1,14 @@
 # Phát hiện Insider Threat — Luồng hoạt động của hệ thống
 
-Cập nhật 2026-11-11 · Bản 0.28 · Bộ chọn một tầng và giao diện nhận điểm ngoài đã triển khai
+Cập nhật 2026-11-12 · Bản 0.31 · Bộ chọn một tầng và pilot Isolation Forest + LSTM đã triển khai
 
 ## 1. Tổng quan
 
-**Cập nhật phương pháp:** bộ chọn duy nhất một tầng Personal → Group → Global và giao diện nhận điểm ngoài đã triển khai theo SPEC-002 v1.2, xem §13. Bộ dữ liệu đã ghép LDAP theo SPEC-001 v1.1. Phần trộn điểm, công thức trọng số và các kết quả score trước đây bên dưới là lịch sử, không phải phương pháp mới. Điểm mô hình, Calibration và so sánh hiệu quả chưa có trong phiên bản routing-only hiện tại.
+**Hiện trạng:** dữ liệu đã ghép LDAP tại §12, bộ chọn Personal → Group → Global tại §13 và pilot Feature Isolation Forest / Sequence LSTM Autoencoder tại §14. Pilot tạo hai điểm thô riêng trên cùng mẫu validation. Hợp nhất/chuẩn tầng/threshold và đánh giá hai case là bước phát triển tiếp theo.
 
-Phạm vi nhiệm vụ hiện tại chỉ là kiến trúc ba tầng theo SPEC-002, gồm hai case Department/Role. Không triển khai mở rộng feature SPEC-003 hoặc toàn bộ framework. Ghép LDAP và kiểm tra dữ liệu là các bước hỗ trợ để hai case chạy đúng.
+Phạm vi hiện tại gồm SPEC-001/002 và pilot hai model theo SPEC-004 được người dùng duyệt. Department và Role tiếp tục là hai định nghĩa thay thế của cùng tầng Group. Các mục2–11 lưu lịch sử thiết kế thống kê cũ; người đọc dùng §12–14 cho code hiện hành.
 
-Hệ thống đã có phiên bản thống kê ba tầng: toàn tổ chức, nhóm và cá nhân. Hai cấu hình dùng nhóm theo phòng ban hoặc chức vụ. Mỗi cấu hình tạo điểm bất thường và một ngưỡng cảnh báo từ Calibration. Cả hai đã chạy trên train, Calibration và test CERT với cùng dữ liệu và tham số. Test lần 1 dùng ngưỡng Calibration đã đóng băng. Hai mô hình tái tạo riêng cho RQ1 chưa triển khai.
+Lịch sử: phiên bản thống kê cũ từng chạy train/Calibration/test với score trộn và ngưỡng Calibration đóng băng. Kết quả đó thuộc phương pháp cũ, được lưu cùng các mục2–11; kết quả pilot hai model mới nằm ở §14.
 
 ## 2. Hệ thống ghép chức vụ trước khi tính thống kê
 
@@ -276,3 +276,49 @@ Output ghi tầng, lý do và cỡ lịch sử; score để trống, trạng th�
 151 test qua trong 12.91 giây; run routing thật 6.723866 giây. Bằng chứng: runs/20261111-spec002-routing-validation và runs/20261111-spec002-tier-routing. Chỉ đọc metadata train/Calibration, không dùng feature/sequence/nhãn để tạo score và không đánh giá test.
 
 Hướng dẫn chạy và giao diện CSV: docs/three-tier-usage.md. Code: src/itd/scoring/routing.py, score_input.py và scripts/run_tier_routing.py. Bước tiếp theo khi có điểm mô hình là thiết kế Calibration/đánh giá cặp case trên cùng dữ liệu và protocol đã duyệt.
+
+## 14. Hai model chấm điểm hai nhánh trên cùng mẫu thử — SPEC-004 v1.0
+
+Hệ thống đã chạy Isolation Forest cho Feature và LSTM Autoencoder cho Sequence trên CPU. Hai model dùng cùng 20 nhân viên và cùng ngày hoạt động.
+
+| Tập | Khoảng ngày | User-day | Row sequence nén |
+|---|---|---:|---:|
+| Fit | 02–22/01/2010 | 305 | 12.159 |
+| Validation | 23–31/01/2010 | 103 | 4.052 |
+
+| Bước | Hệ thống thực hiện | Kết quả |
+|---|---|---|
+| 1 | Hệ thống đối soát checksum, audit train sạch và khóa Feature/Sequence. | Hai nhánh cùng cohort và cùng user-day. |
+| 2 | Hệ thống học median từ ô feature hợp lệ trong fit, điền ô không áp dụng rồi nối cờ mask. | IF nhận 200 đầu vào từ 100 feature và 100 cờ. |
+| 3 | IF xây 100 cây và chấm điểm từng ngày validation. | Mỗi ngày có một điểm bất thường Feature. |
+| 4 | Hệ thống học vocab/scaler từ fit và giữ mask cho 24 thuộc tính sequence. | Chuỗi giữ nguyên thứ tự và các vị trí hợp lệ. |
+| 5 | Hệ thống warmup bằng model tạm rồi khởi tạo lại model để đo đúng một epoch LSTM. | Một checkpoint sau khi đi qua đủ 305 ngày fit. |
+| 6 | LSTM tái tạo chuỗi validation và tổng hợp lỗi trên các thuộc tính hợp lệ. | Mỗi ngày có một điểm bất thường Sequence. |
+| 7 | Hệ thống lưu model, preprocessor, số đo runtime và hai điểm riêng. | validation_scores.parquet có 103 row đầy đủ. |
+
+| Thời gian đo thật | Giây |
+|---|---:|
+| Fit IF | 0,223 |
+| IF chấm validation | 0,0069 |
+| Một epoch LSTM | 1,081 |
+| LSTM chấm validation | 0,222 |
+| Đọc dữ liệu | 11,372 |
+| Tổng wall time pilot, gồm setup/warmup/đối soát/ghi artifact | 24,647 |
+
+| Kịch bản ngoại suy training | Một epoch trên train đầy đủ | 20 epoch giả định |
+|---|---:|---:|
+| Nhân theo số bước sequence thật | Khoảng 5,93 phút | Khoảng 1,98 giờ |
+| Nhân theo số user-day | Khoảng 6,21 phút | Khoảng 2,07 giờ |
+
+Hai hàng là kịch bản từ mẫu nhỏ, không phải khoảng tin cậy hoặc số đo full run. Dự toán training giữ riêng thời gian đọc dữ liệu, setup và validation.
+
+330 test qua trong 43,91 giây; review khoa học độc lập READY. Checkpoint, raw score và nguồn dữ liệu đã được kiểm tra; đây là pilot kỹ thuật một epoch (→ DL-070–072).
+
+| Thuật ngữ | Nghĩa trong luồng này |
+|---|---|
+| Isolation Forest | Model dùng cây để tìm những tổ hợp feature dễ bị tách khỏi các ngày khác. |
+| LSTM Autoencoder | Model học tái tạo chuỗi thao tác; lỗi tái tạo tạo ra điểm riêng cho nhánh sequence. |
+| Epoch | Một lượt học qua toàn bộ dữ liệu fit của mẫu thử. |
+| Raw score | Điểm đầu ra riêng từng model, dùng cho bước chuẩn hóa/hợp nhất được thiết kế tiếp theo. |
+
+Hướng dẫn: docs/if-lstm-cpu-pilot-usage.md. Bằng chứng: runs/20261112-if-lstm-cpu-pilot-01 và runs/20261112-spec004-validation. Hai case Department/Role và bộ chọn một tầng giữ nguyên ở §13. Việc chuẩn hóa/hợp nhất hai điểm và hiệu chỉnh threshold cuối trên Calibration là bước tiếp theo.

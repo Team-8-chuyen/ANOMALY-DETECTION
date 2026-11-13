@@ -1,8 +1,8 @@
 # Framework-rework — Phát hiện Insider Threat
 
-Phạm vi đang bàn giao: ghép LDAP vào dữ liệu đã tiền xử lý theo SPEC-001 v1.1 và chọn duy nhất Personal → Group → Global theo SPEC-002 v1.2. Hai case dùng Group theo Department hoặc Role; điểm do bên ngoài cung cấp, chưa tạo threshold hoặc đánh giá hiệu quả phát hiện.
+Phạm vi đang bàn giao: ghép LDAP theo SPEC-001 v1.1, chọn duy nhất Personal → Group → Global theo SPEC-002 v1.2, và pilot hai nhánh Feature Isolation Forest / Sequence LSTM Autoencoder theo SPEC-004 v1.0. Hai case dùng Group theo Department hoặc Role. Pilot xuất hai điểm thô riêng; chuẩn hóa/hợp nhất điểm, threshold và đánh giá hiệu quả là bước nối tiếp.
 
-Trạng thái: **đã triển khai, 151 test qua**. [Hướng dẫn chạy bộ chọn tầng](docs/three-tier-usage.md) · [Ghép LDAP](docs/enrich-preprocessed-ldap-usage.md). Code hiện tại chỉ cần hai CLI `scripts/enrich_preprocessed_ldap.py` và `scripts/run_tier_routing.py`, bốn config trong `configs/experiments/`, ba module hỗ trợ tương ứng, test và `requirements-ldap.txt`. Các mục C1–C7 bên dưới là cấu trúc nghiên cứu dự kiến, không phải danh sách tính năng đã triển khai.
+Trạng thái: **330 test qua; pilot IF + LSTM đã hoàn tất trên CPU**. [Hướng dẫn pilot và thời gian đo thật](docs/if-lstm-cpu-pilot-usage.md) · [Bộ chọn tầng](docs/three-tier-usage.md) · [Ghép LDAP](docs/enrich-preprocessed-ldap-usage.md). CLI pilot là `scripts/run_if_lstm_pilot.py`, config `configs/experiments/if_lstm_cpu_pilot.json`, dependencies `requirements-models-cpu.txt`; hai CLI LDAP/router tiếp tục dùng `requirements-ldap.txt`. Các mục C1–C7 bên dưới là cấu trúc nghiên cứu dự kiến, không phải danh sách mọi tính năng đã triển khai.
 
 Môi trường Python, dữ liệu, run artifact và IDE settings được giữ local và loại khỏi Git. Các script prototype/bản xuất cũ không dùng ở lần chạy hiện tại được sao lưu trong `.local-archive/` (gitignored); dùng code/config/test/spec hiện hành để bàn giao.
 
