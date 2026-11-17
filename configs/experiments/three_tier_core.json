@@ -1,0 +1,16 @@
+{
+  "fusion": {"feature_weight": 0.5, "sequence_weight": 0.5},
+  "normalization": {
+    "method": "median_iqr",
+    "quantile_method": "linear",
+    "epsilon": 0.000001,
+    "keep_signed": true
+  },
+  "routing": {
+    "window_days": 30,
+    "min_personal_days": 7,
+    "min_group_users": 2
+  },
+  "modes": ["natural", "monthly_reset"],
+  "reset": {"calendar": "gregorian"}
+}
